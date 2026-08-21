@@ -52,7 +52,6 @@ find_library(CSOUND_LIB csound64 REQUIRED)
 target_link_libraries(juce_csd
   PUBLIC
         juce::juce_audio_basics  # Includes gui_basics, audio_processors, etc.
-  PRIVATE
         nlohmann_json::nlohmann_json
         readerwriterqueue
         ${CSOUND_LIB}
