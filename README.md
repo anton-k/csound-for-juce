@@ -13,3 +13,6 @@ It implements:
 
 With this library you need to only write GUI code and audio processing
 and managment of the plugin parameters is handled by the library.
+
+The library is for audio-developers that which to use Csound for
+audio processing but can write their own shiny UI.
