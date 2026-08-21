@@ -4,7 +4,14 @@ set(JUCE_ENABLE_MODULE_SOURCE_GROUPS ON CACHE BOOL "" FORCE)
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-project(juce_csd VERSION 1.0.0)
+project(juce_csd VERSION 0.0.1)
 
 set (CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+
+add_subdirectory(juce)
+
 add_subdirectory(modules)
+# add_subdirectory(examples/)
+# add_subdirectory(examples/Effect)
+# add_subdirectory(examples/Synth)
+# add_subdirectory(examples/UnitTests)
