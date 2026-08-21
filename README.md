@@ -21,7 +21,7 @@ the audio loop and parameters, while you focus on sound design and your UI.
 * Seamless CSD embedding and lifecycle management
 * Full access to Csound's vast opcode library — use any algorithm Csound offers, directly in your plugin
 
-**What you write**: just the GUI. Audio processing, parameter routing, and plugin lifecycle are handled by the library.
+**What you write**: just the GUI and Csound file for audio core. Audio processing, parameter routing, and plugin lifecycle are handled by the library.
 
 **Who it's for**: audio developers who want to harness Csound's decades of DSP innovation inside a JUCE plugin they fully control — and who'd rather write their own shiny UI than fight with C's threading and channel APIs.
 
