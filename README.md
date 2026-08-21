@@ -15,7 +15,7 @@ the audio loop and parameters, while you focus on sound design and your UI.
 
 **What it gives you**:
 
-* A rock-solid audio processing loop, ready for production
+* Solid audio processing loop, ready for production
 * Parameter management with smoothing and true bypass
 * Support for both FX and synth plugins, including side-chain input
 * Seamless CSD embedding and lifecycle management
