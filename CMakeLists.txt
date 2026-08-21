@@ -7,6 +7,4 @@ set (CMAKE_POSITION_INDEPENDENT_CODE ON)
 project(juce_csd VERSION 1.0.0)
 
 set (CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
-
-add_subdirectory(juce)
 add_subdirectory(modules)
