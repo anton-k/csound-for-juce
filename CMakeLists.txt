@@ -15,7 +15,7 @@ target_sources(juce_csd PRIVATE
 )
 
 include(cmake/CPM.cmake)
-CPMAddPackage("gh:juce-framework/JUCE#8.0.7")
+CPMAddPackage("gh:juce-framework/JUCE#3af3ce009f6a02f6fa651008fffb5b41743a9fab")
 CPMAddPackage(
     NAME readerwriterqueue
     GITHUB_REPOSITORY cameron314/readerwriterqueue
