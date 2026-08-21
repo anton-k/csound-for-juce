@@ -1,17 +1,59 @@
+# In your library's CMakeLists.txt
 cmake_minimum_required(VERSION 3.22)
-set_property(GLOBAL PROPERTY USE_FOLDERS YES)
-set(JUCE_ENABLE_MODULE_SOURCE_GROUPS ON CACHE BOOL "" FORCE)
-set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_POSITION_INDEPENDENT_CODE ON)
+project(juce_csd VERSION 1.0.0 LANGUAGES C CXX)
 
-project(juce_csd VERSION 0.0.1)
+# Define your library target
+add_library(juce_csd)
 
-set (CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+# Add your source files (if any)
+target_sources(juce_csd PRIVATE
+  src/juce_csd/params/JsonSerializer.cpp
+  src/juce_csd/params/Parameters.cpp
+  src/juce_csd/audio/FxProcessor.cpp
+  src/juce_csd/audio/Buffer.cpp
+  src/juce_csd/plugin/FxPluginProcessor.cpp
+)
 
-# add_subdirectory(juce)
+include(cmake/CPM.cmake)
+CPMAddPackage("gh:juce-framework/JUCE#7aae7d8e8deb8413bb01633d2795ef9974a181c5")
+CPMAddPackage(
+    NAME readerwriterqueue
+    GITHUB_REPOSITORY cameron314/readerwriterqueue
+    GIT_TAG 131af2c479c6ba36142ee9805e9f60fc4adfa22c
+)
+# Check if the target exists, if not, create it
+if(NOT TARGET readerwriterqueue)
+    message(STATUS "readerwriterqueue target not found, creating it manually")
+    add_library(hft_readerwriterqueue INTERFACE)
+    target_include_directories(readerwriterqueue INTERFACE
+        ${readerwriterqueue_SOURCE_DIR}
+    )
+endif()
 
-add_subdirectory(modules)
-# add_subdirectory(examples/)
-# add_subdirectory(examples/Effect)
-# add_subdirectory(examples/Synth)
-# add_subdirectory(examples/UnitTests)
+get_target_property(INC_DIRS readerwriterqueue INTERFACE_INCLUDE_DIRECTORIES)
+message(STATUS "readerwriterqueue include dirs: ${INC_DIRS}")
+
+CPMAddPackage("gh:nlohmann/json#cdf52ae9bef77a0844e02e42df6d2df83a55c4b9")
+
+target_include_directories(juce_csd
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}>
+)
+
+# If you have private includes
+target_include_directories(juce_csd
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(juce_csd
+  PUBLIC
+        juce::juce_audio_basics  # Includes gui_basics, audio_processors, etc.
+  PRIVATE
+        nlohmann_json::nlohmann_json
+        readerwriterqueue
+)
+
+# Set C++ standard
+target_compile_features(juce_csd PUBLIC cxx_std_20)
