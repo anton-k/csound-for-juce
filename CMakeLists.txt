@@ -8,7 +8,7 @@ project(juce_csd VERSION 0.0.1)
 
 set (CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
 
-add_subdirectory(juce)
+# add_subdirectory(juce)
 
 add_subdirectory(modules)
 # add_subdirectory(examples/)
