@@ -15,7 +15,7 @@ target_sources(juce_csd PRIVATE
 )
 
 include(cmake/CPM.cmake)
-CPMAddPackage("gh:juce-framework/JUCE#7aae7d8e8deb8413bb01633d2795ef9974a181c5")
+CPMAddPackage("gh:juce-framework/JUCE#8.0.7")
 CPMAddPackage(
     NAME readerwriterqueue
     GITHUB_REPOSITORY cameron314/readerwriterqueue
@@ -47,12 +47,15 @@ target_include_directories(juce_csd
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+find_library(CSOUND_LIB csound64 REQUIRED)
+
 target_link_libraries(juce_csd
   PUBLIC
         juce::juce_audio_basics  # Includes gui_basics, audio_processors, etc.
   PRIVATE
         nlohmann_json::nlohmann_json
         readerwriterqueue
+        ${CSOUND_LIB}
 )
 
 # Set C++ standard
