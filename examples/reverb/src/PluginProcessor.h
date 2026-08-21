@@ -2,12 +2,13 @@
 
 #include "juce_csd/plugin/FxPluginProcessor.h"
 #include "const.h"
-#include "embedded_data.h"
+#include "EmbeddedCsd.h"
+const std::string& csdContent = EmbeddedCsd::getReverbCsd();
 
 class AudioPluginAudioProcessor final : public juce_csd::FxPluginProcessor
 {
 public:
-    AudioPluginAudioProcessor(): juce_csd::FxPluginProcessor(std::string(getEmbeddedCsd()), init_parameter_spec()){};
+    AudioPluginAudioProcessor(): juce_csd::FxPluginProcessor(csdContent, init_parameter_spec()){};
     ~AudioPluginAudioProcessor() override {};
 
     juce::AudioProcessorEditor* createEditor() override;
