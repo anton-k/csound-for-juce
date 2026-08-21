@@ -2,9 +2,7 @@
 
 csound-for-juce handles the audio processing loop and parameter management
 so you don't have to. It hides all the boilerplate needed to
-build VST, AU, and CLAP plugins powered by Csound — no thread
-juggling, no channel mapping, no CSD loading ceremony.
-Just focus on your sound and your UI.
+build VST, AU, and CLAP plugins powered by Csound.
 
 Csound has been the gold standard of computer music research since
 1985 — over 1,800 opcodes, from granular synthesis to spectral
