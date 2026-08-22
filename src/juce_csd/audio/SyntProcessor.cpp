@@ -1,5 +1,6 @@
 
-#include <juce_csd/audio/FxProcessor.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_csd/audio/SyntProcessor.h>
 #include <csound/csound.h>
 #include <csound/csound.hpp>
 #include <memory>
@@ -58,20 +59,16 @@ void CsoundSettings::set_channel_names(Csound* csound) {
   csound->DeleteChannelList(channel_list);
 }
 
-FxProcessor::FxProcessor(const std::string& _csd_file_content, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor, const int buffer_size):
-  csound(nullptr), csound_settings(),csd_file_content(_csd_file_content), parameters(processor, parameter_spec), is_ready_to_play(false), audio_buffers(buffer_size)
+SyntProcessor::SyntProcessor(const std::string& _csd_file_content, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor, int buffer_size):
+  csound(nullptr), csound_settings(),csd_file_content(_csd_file_content), parameters(processor, parameter_spec), is_ready_to_play(false), audio_buffers(0, buffer_size)
  {}
 
-int FxProcessor::getLatencySamples() {
-    return csound_settings.ksmps;
-}
-
-void FxProcessor::prepareToPlay (double sampleRate)
+void SyntProcessor::prepareToPlay (double sampleRate)
 {
     if (!is_ready_to_play) {
         DBG("LOAD CSOUND FILE\n");
         csound = std::unique_ptr<Csound>(new Csound());
-        std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {}", static_cast<int>(sampleRate));
+        std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sampleRate));
         csound->SetOption(options.c_str());
 
         #if defined(CS_VERSION) && CS_VERSION >= 7
@@ -85,28 +82,22 @@ void FxProcessor::prepareToPlay (double sampleRate)
 
         audio_buffers.clear();
         csound_settings.prepare(csound.get());
-        int frame_size = csound_settings.ksmps * csound_settings.out_size;
-        for (int index: std::ranges::iota_view(0, frame_size)) {
-            juce::ignoreUnused(index);
-            audio_buffers.write_output(0.0);
-        }
         is_ready_to_play = true;
     }
 }
 
-void FxProcessor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer)
+void SyntProcessor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi_buffer)
 {
     if (is_ready_to_play) {
         clear_excess_output_channels(processor, buffer);
         update_parameters();
-        read_input_buffer_from_host(buffer);
         csound_process(buffer);
         write_output_buffer_to_host(buffer);
     }
 
 }
 
-void FxProcessor::releaseResources() {
+void SyntProcessor::releaseResources() {
     is_ready_to_play = false;
     if (csound != nullptr) {
         csound->Reset();
@@ -114,7 +105,7 @@ void FxProcessor::releaseResources() {
     audio_buffers.clear();
 }
 
-void FxProcessor::clear_excess_output_channels(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer) {
+void SyntProcessor::clear_excess_output_channels(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer) {
     int total_num_input_channels = processor.getTotalNumInputChannels();
     int total_num_output_channels = processor.getTotalNumOutputChannels();
     for (const auto channel_to_clear: std::views::iota(total_num_input_channels, total_num_output_channels)) {
@@ -122,15 +113,7 @@ void FxProcessor::clear_excess_output_channels(const juce::AudioProcessor& proce
     }
 }
 
-void FxProcessor::read_input_buffer_from_host(juce::AudioBuffer<float>& buffer) {
-    for (auto sample_index: std::ranges::iota_view(0, buffer.getNumSamples())) {
-        for (auto channel_index: std::ranges::iota_view(0, buffer.getNumChannels())) {
-            audio_buffers.write_input(csound_settings.zero_dbfs * buffer.getSample(channel_index, sample_index));
-        }
-    }
-}
-
-void FxProcessor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
+void SyntProcessor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
     float sample{0.0};
     for (auto sample_index: std::ranges::iota_view(0, buffer.getNumSamples())) {
         for (auto channel_index: std::ranges::iota_view(0, buffer.getNumChannels())) {
@@ -140,25 +123,16 @@ void FxProcessor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) 
     }
 }
 
-void FxProcessor::update_parameters() {
+void SyntProcessor::update_parameters() {
   parameters.update_on_process(csound.get());
 }
 
-void FxProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
+void SyntProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
     int buffer_size = buffer.getNumSamples();
     csound_cycle_size = get_csound_cycle_size(buffer_size);
-    float sample{0.0};
 
     for (int cycle_index: std::ranges::iota_view(0, csound_cycle_size)) {
         juce::ignoreUnused(cycle_index);
-
-        double* spin = csound->GetSpin();
-        for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
-            for (int channel: std::ranges::iota_view(0, csound_settings.in_size)) {
-                audio_buffers.read_input(sample);
-                spin[2 * index + channel] = static_cast<double>(sample);
-            }
-        }
 
         csound->PerformKsmps();
 
@@ -171,7 +145,7 @@ void FxProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
     }
 }
 
-int FxProcessor::get_csound_cycle_size(int block_size) {
+int SyntProcessor::get_csound_cycle_size(int block_size) {
     int stored_buffer_sample_size = audio_buffers.output_size() / csound_settings.out_size;
     if (block_size > stored_buffer_sample_size) {
            return std::ceil(static_cast<double>(block_size - stored_buffer_sample_size) / csound_settings.ksmps);
@@ -180,19 +154,19 @@ int FxProcessor::get_csound_cycle_size(int block_size) {
     }
 }
 
-void FxProcessor::getStateInformation (juce::MemoryBlock& destData) {
+void SyntProcessor::getStateInformation (juce::MemoryBlock& destData) {
   parameters.getStateInformation(destData);
 }
 
-void FxProcessor::setStateInformation (const void* data, int sizeInBytes) {
+void SyntProcessor::setStateInformation (const void* data, int sizeInBytes) {
   parameters.setStateInformation(data, sizeInBytes);
 }
 
-juce::AudioParameterFloat& FxProcessor::get_param(const std::string& name) {
+juce::AudioParameterFloat& SyntProcessor::get_param(const std::string& name) {
     return parameters.get_audio_parameter_ref(name);
 }
 
-Parameters& FxProcessor::get_parameters() {
+Parameters& SyntProcessor::get_parameters() {
     return parameters;
 }
 }

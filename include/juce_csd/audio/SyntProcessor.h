@@ -11,29 +11,25 @@
 
 namespace juce_csd {
 
-class CsoundSettings {
-  public:
-      CsoundSettings();
-      void prepare(Csound*);
-      void set_channel_names(Csound*);
-      int ksmps{1};
-      int out_size{2};
-      int in_size{0};
-      float zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
-      std::vector<std::string> channel_names;
+struct CsoundSettings {
+    CsoundSettings();
+    void prepare(Csound*);
+    void set_channel_names(Csound*);
+    int ksmps{1};
+    int out_size{2};
+    int in_size{0};
+    float zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
+    std::vector<std::string> channel_names;
 };
 
-
-class FxProcessor {
+class SyntProcessor {
   public:
-    FxProcessor(const std::string& csd, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor, const int buffer_size = 24000);
-    ~FxProcessor() { };
+    SyntProcessor(const std::string& csd, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor, int buffer_size = 24000);
+    ~SyntProcessor() { };
 
     void prepareToPlay(double sampleRate);
-    void processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>&);
+    void processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>&, juce::MidiBuffer&);
     void releaseResources();
-
-    int getLatencySamples();
 
     void getStateInformation (juce::MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
@@ -43,7 +39,6 @@ class FxProcessor {
 
   private:
     void clear_excess_output_channels(const juce::AudioProcessor& processor, juce::AudioBuffer<float>&);
-    void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
     void csound_process(juce::AudioBuffer<float>&);
     void update_parameters();
@@ -56,7 +51,7 @@ class FxProcessor {
     std::string csd_file_content;
     Parameters parameters;
     bool is_ready_to_play;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FxProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SyntProcessor)
 };
 
 }

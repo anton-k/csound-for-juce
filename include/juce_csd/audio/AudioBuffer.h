@@ -5,11 +5,11 @@ using namespace moodycamel;
 
 namespace juce_csd {
 
-class Buffers {
+class AudioBuffers {
   public:
-    Buffers();
-    Buffers(int size);
-    Buffers(int input_size, int out_size);
+    AudioBuffers();
+    AudioBuffers(int size);
+    AudioBuffers(int input_size, int out_size);
 
     void write_input(float);
     void read_input(float&);

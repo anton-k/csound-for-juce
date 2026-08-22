@@ -1,35 +1,33 @@
 
 #include <readerwriterqueue.h>
-#include <juce_csd/audio/Buffer.hpp>
+#include <juce_csd/audio/AudioBuffer.h>
 
 using namespace moodycamel;
 namespace juce_csd {
 
-Buffers::Buffers(int size): Buffers(size, size) {}
+AudioBuffers::AudioBuffers(int size): AudioBuffers(size, size) {}
 
-Buffers::Buffers(int input_size, int output_size):
+AudioBuffers::AudioBuffers(int input_size, int output_size):
   input_buffer{ReaderWriterQueue<float>(static_cast<size_t>(input_size))},
   output_buffer{ReaderWriterQueue<float>(static_cast<size_t>(output_size))}
 {}
 
-Buffers::Buffers(): Buffers(24000) {}
-
-void Buffers::write_input(float sample) {
+void AudioBuffers::write_input(float sample) {
   input_buffer.try_enqueue(sample);
 }
 
-void Buffers::read_input(float &sample) {
+void AudioBuffers::read_input(float &sample) {
   if (!input_buffer.try_dequeue(sample)) {
       sample = 0.0f;
   }
 }
 
-void Buffers::write_output(float sample) {
+void AudioBuffers::write_output(float sample) {
   output_buffer.try_enqueue(sample);
   out_size++;
 }
 
-void Buffers::read_output(float &sample) {
+void AudioBuffers::read_output(float &sample) {
   if (output_buffer.try_dequeue(sample)) {
       out_size.fetch_sub(1, std::memory_order_relaxed);
   } else {
@@ -38,11 +36,11 @@ void Buffers::read_output(float &sample) {
 
 }
 
-int Buffers::output_size() {
+int AudioBuffers::output_size() {
   return out_size.load(std::memory_order_relaxed);
 }
 
-void Buffers::clear() {
+void AudioBuffers::clear() {
     float temp;
     // Drain both queues safely
     while (input_buffer.try_dequeue(temp));
