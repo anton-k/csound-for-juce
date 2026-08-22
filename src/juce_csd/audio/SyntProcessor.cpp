@@ -63,38 +63,112 @@ SyntProcessor::SyntProcessor(const std::string& _csd_file_content, const Paramet
   csound(nullptr), csound_settings(),csd_file_content(_csd_file_content), parameters(processor, parameter_spec), is_ready_to_play(false), audio_buffers(0, buffer_size)
  {}
 
+void SyntProcessor::set_csound_midi_callbacks() {
+    #if defined(CS_VERSION) && CS_VERSION >= 7
+        csound->SetHostAudioIO();
+        csound->SetHostMIDIIO();
+    #else
+        // Fallback for Csound 6 using the underlying C API directly via GetCsound()
+        csoundSetHostImplementedAudioIO(csound->GetCsound(), 1, 0);
+        csound->SetHostImplementedMIDIIO(1);
+    #endif
+
+    csound->SetHostData(this);
+    csound->SetExternalMidiInOpenCallback(&SyntProcessor::midi_device_open);
+    csound->SetExternalMidiInCloseCallback(&SyntProcessor::midi_device_close);
+    csound->SetExternalMidiOutOpenCallback(&SyntProcessor::midi_device_open);
+    csound->SetExternalMidiOutCloseCallback(&SyntProcessor::midi_device_close);
+    csound->SetExternalMidiReadCallback(&SyntProcessor::midi_read);
+    csound->SetExternalMidiWriteCallback(&SyntProcessor::midi_write);
+}
+
+int SyntProcessor::midi_device_open(CSOUND *csound_, void **user_data, const char *devName) {
+    auto csound_host_data = csoundGetHostData(csound_);
+    *user_data = (void *)csound_host_data;
+    return 0;
+}
+
+int SyntProcessor::midi_device_close(CSOUND *csound_, void *user_data)
+{
+    return 0;
+}
+
+int SyntProcessor::midi_read(CSOUND* csound, void* userData, unsigned char* buf, int max_size) {
+    auto* proc = static_cast<SyntProcessor*>(userData);
+    if (!proc) return 0;
+
+    auto& queue = proc->midi_buffer;
+    int cycle_end_sample = proc->current_sample_end_sample;
+
+    int bytes_written = 0;
+    TimedMidiEvent next_event;
+
+    while (queue.peek(next_event)) {
+        int msg_size = next_event.message.getRawDataSize();
+
+        if (next_event.samplePosition < cycle_end_sample) {
+            if (bytes_written + msg_size > max_size) {
+                break;
+            }
+
+            queue.pop();
+            std::memcpy(buf + bytes_written, next_event.message.getRawData(), msg_size);
+            bytes_written += msg_size;
+        } else {
+            break;
+        }
+    }
+
+    return bytes_written;
+}
+
+// TODO
+int SyntProcessor::midi_write(CSOUND *csound_, void *userData, const unsigned char *midi_buffer, int midi_buffer_size)
+{
+    /*
+    int result = 0;
+    auto csound_host_data = csoundGetHostData(csound_);
+    CsoundVST3AudioProcessor *processor = static_cast<CsoundVST3AudioProcessor *>(csound_host_data);
+    MidiChannelMessage channel_message;
+    channel_message.plugin_frame = processor->plugin_frame;
+    channel_message.message = juce::MidiMessage(midi_buffer, midi_buffer_size, 0);
+    processor->midi_output_fifo.enqueue(channel_message);
+    return result;
+    */
+    return 0;
+}
+
+
+void SyntProcessor::setup_csound(double sampleRate) {
+    DBG("LOAD CSOUND FILE\n");
+    csound = std::unique_ptr<Csound>(new Csound());
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sampleRate));
+    csound->SetOption(options.c_str());
+
+    set_csound_midi_callbacks();
+    csound->CompileCSD(csd_file_content.c_str(), 1);
+    csound->Start();
+}
+
 void SyntProcessor::prepareToPlay (double sampleRate)
 {
     if (!is_ready_to_play) {
-        DBG("LOAD CSOUND FILE\n");
-        csound = std::unique_ptr<Csound>(new Csound());
-        std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sampleRate));
-        csound->SetOption(options.c_str());
-
-        #if defined(CS_VERSION) && CS_VERSION >= 7
-            csound->SetHostAudioIO();
-        #else
-            // Fallback for Csound 6 using the underlying C API directly via GetCsound()
-            csoundSetHostImplementedAudioIO(csound->GetCsound(), 1, 0);
-        #endif
-        csound->CompileCSD(csd_file_content.c_str(), 1);
-        csound->Start();
-
-        audio_buffers.clear();
+        setup_csound(sampleRate);
+        clear_buffers();
         csound_settings.prepare(csound.get());
         is_ready_to_play = true;
     }
 }
 
-void SyntProcessor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi_buffer)
+void SyntProcessor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)
 {
     if (is_ready_to_play) {
         clear_excess_output_channels(processor, buffer);
+        read_midi_from_host(host_midi_buffer);
         update_parameters();
         csound_process(buffer);
         write_output_buffer_to_host(buffer);
     }
-
 }
 
 void SyntProcessor::releaseResources() {
@@ -102,7 +176,7 @@ void SyntProcessor::releaseResources() {
     if (csound != nullptr) {
         csound->Reset();
     }
-    audio_buffers.clear();
+    clear_buffers();
 }
 
 void SyntProcessor::clear_excess_output_channels(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer) {
@@ -123,6 +197,17 @@ void SyntProcessor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer
     }
 }
 
+void SyntProcessor::read_midi_from_host(juce::MidiBuffer& host_midi_messages) {
+    // Note: We filter out SysEx here
+    // to guarantee 100% RT-safety (no hidden heap allocations)
+    for (const auto metadata : host_midi_messages) {
+        auto msg = metadata.getMessage();
+        if (!msg.isSysEx()) {
+            midi_buffer.push(msg, metadata.samplePosition);
+        }
+    }
+}
+
 void SyntProcessor::update_parameters() {
   parameters.update_on_process(csound.get());
 }
@@ -130,6 +215,7 @@ void SyntProcessor::update_parameters() {
 void SyntProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
     int buffer_size = buffer.getNumSamples();
     csound_cycle_size = get_csound_cycle_size(buffer_size);
+    int samples_processed = 0;
 
     for (int cycle_index: std::ranges::iota_view(0, csound_cycle_size)) {
         juce::ignoreUnused(cycle_index);
@@ -142,7 +228,13 @@ void SyntProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
                 audio_buffers.write_output(spout[2 * index + channel]);
             }
         }
+        samples_processed += csound_settings.ksmps;
     }
+}
+
+void SyntProcessor::clear_buffers() {
+    audio_buffers.clear();
+    midi_buffer.clear();
 }
 
 int SyntProcessor::get_csound_cycle_size(int block_size) {

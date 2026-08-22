@@ -7,8 +7,8 @@ using namespace moodycamel;
 namespace juce_csd {
 
 struct TimedMidiEvent {
-    juce::MidiMessage message;
-    int samplePosition; // Keep it as an int for exact cycle matching
+  juce::MidiMessage message;
+  int samplePosition;
 };
 
 class MidiBuffer {
