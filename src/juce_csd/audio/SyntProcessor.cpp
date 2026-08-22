@@ -122,19 +122,19 @@ int SyntProcessor::midi_read(CSOUND* csound, void* userData, unsigned char* buf,
     return bytes_written;
 }
 
-// TODO
+// TODO: how to work with MIDI output?
+// study:
+// https://github.com/gogins-dev/csound-vst3/blob/main/CsoundVST3/Source/PluginProcessor.cpp#L205C1-L216C1
 int SyntProcessor::midi_write(CSOUND *csound_, void *userData, const unsigned char *midi_buffer, int midi_buffer_size)
 {
-    /*
-    int result = 0;
+ /*
     auto csound_host_data = csoundGetHostData(csound_);
-    CsoundVST3AudioProcessor *processor = static_cast<CsoundVST3AudioProcessor *>(csound_host_data);
+    SyntProcessor *processor = static_cast<SyntProcessor *>(csound_host_data);
     MidiChannelMessage channel_message;
     channel_message.plugin_frame = processor->plugin_frame;
     channel_message.message = juce::MidiMessage(midi_buffer, midi_buffer_size, 0);
     processor->midi_output_fifo.enqueue(channel_message);
-    return result;
-    */
+*/
     return 0;
 }
 
@@ -218,6 +218,7 @@ void SyntProcessor::csound_process(juce::AudioBuffer<float>& buffer) {
     int samples_processed = 0;
 
     for (int cycle_index: std::ranges::iota_view(0, csound_cycle_size)) {
+        current_sample_end_sample = (cycle_index + 1) * csound_settings.ksmps;
         juce::ignoreUnused(cycle_index);
 
         csound->PerformKsmps();
