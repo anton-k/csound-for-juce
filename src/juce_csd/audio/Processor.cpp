@@ -122,7 +122,10 @@ void Processor::write_midi_to_host(juce::MidiBuffer& host_midi_messages) {
 }
 
 void Processor::update_parameters() {
-  parameters.update_on_process(csound.get_csound().get());
+    Csound* csound_ptr = csound.get_csound();
+    if (csound_ptr != nullptr) {
+        parameters.update_on_process(csound_ptr);
+    }
 }
 
 void Processor::getStateInformation (juce::MemoryBlock& destData) {

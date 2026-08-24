@@ -88,7 +88,10 @@ class Processor {
     void prepare_to_play(int sample_rate, int max_block_size);
     void process_block(int block_size);
     void release_resources();
-    std::unique_ptr<Csound> get_csound();
+
+    Csound* get_csound() {
+      return csound.get();
+    };
 
     int get_latency_samples();
 
