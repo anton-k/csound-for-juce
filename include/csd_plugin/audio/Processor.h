@@ -120,6 +120,8 @@ class Processor {
       return csound_settings;
     }
 
+    int get_current_sample();
+
 
   private:
     void csound_process(int block_size);
@@ -128,7 +130,6 @@ class Processor {
     void set_host_io();
     void setup_csound(int sample_rate);
     void clear_buffers();
-    int get_current_sample();
 
     // midi callbacks
     static int midi_read(CSOUND*, void* userData, unsigned char* buf, int n);
