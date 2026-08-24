@@ -9,19 +9,9 @@
 #include <ranges>
 #include <juce_audio_processors/juce_audio_processors.h>
 
-const float WRAP_VOLUME_LIMIT = 5.0f;
-
 namespace juce_csd {
 
 namespace {
-
-float wrap_limiter(float sample) {
-    if (std::abs(sample) > WRAP_VOLUME_LIMIT) {
-        return WRAP_VOLUME_LIMIT * std::signbit(sample);
-    } else {
-        return sample;
-    }
-}
 
 bool is_control_channel_type(controlChannelInfo_t info) {
   return (info.type & CSOUND_CHANNEL_TYPE_MASK) == CSOUND_CONTROL_CHANNEL;

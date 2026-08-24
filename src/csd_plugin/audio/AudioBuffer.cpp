@@ -8,23 +8,15 @@ using namespace moodycamel;
 namespace csd_plugin {
 
 bool AudioBuffer::write(float sample) {
-  bool is_ok = queue->try_enqueue(sample);
-  if (is_ok) {
-    size++;
-  }
-  return is_ok;
+  return queue->try_enqueue(sample);
 }
 
 bool AudioBuffer::read(float& sample) {
-  bool is_ok = queue->try_dequeue(sample);
-  if (is_ok) {
-      size.fetch_sub(1, std::memory_order_relaxed);
-  }
-  return is_ok;
+  return queue->try_dequeue(sample);
 }
 
 int AudioBuffer::get_size() {
-  return size.load(std::memory_order_relaxed);
+  return queue->size_approx();
 }
 
 int AudioBuffer::get_capacity() {
@@ -36,15 +28,14 @@ void AudioBuffer::reset(int capacity) {
     queue.reset();
     queue = std::make_unique<ReaderWriterQueue<float>>(capacity);
     current_capacity.store(capacity);
-    size.store(0);
   } else {
     clear();
   }
 }
 
 void AudioBuffer::clear() {
-  float sample;
-  while (queue->try_enqueue(sample));
+  float sample{0.f};
+  while (queue->try_dequeue(sample));
 }
 
 }

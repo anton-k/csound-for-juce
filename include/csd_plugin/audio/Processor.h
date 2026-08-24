@@ -83,7 +83,10 @@ class Processor {
       csound(nullptr),
       csd_file_content(csd),
       io_layout(io_layout_) {};
-    ~Processor() { };
+    ~Processor() {
+      release_resources();
+      csound.reset();
+    };
 
     void prepare_to_play(int sample_rate, int max_block_size);
     void process_block(int block_size);
@@ -143,6 +146,10 @@ class Processor {
     bool ready_to_play{false};
     IOLayout io_layout;
     int current_cycle_end_sample{0};
+
+    std::atomic<bool> is_processing_{false};
+    int current_sample_rate{0};
+    int current_max_block_size{0};
 };
 
 }

@@ -11,8 +11,7 @@ class AudioBuffer {
   public:
     AudioBuffer(int capacity):
       queue(std::make_unique<ReaderWriterQueue<float>>(capacity)),
-      current_capacity(capacity),
-      size(0)
+      current_capacity(capacity)
     {}
 
     bool write(float);
@@ -25,7 +24,6 @@ class AudioBuffer {
   private:
     std::unique_ptr<ReaderWriterQueue<float>> queue{new ReaderWriterQueue<float>(0)};
     std::atomic<int> current_capacity{0};
-    std::atomic<int> size{0};
 };
 
 class AudioBuffers {

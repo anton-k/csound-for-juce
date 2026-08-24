@@ -8,9 +8,9 @@ void MidiBuffer::clear() {
       while(midi_buffer.try_dequeue(temp));
 }
 
-void MidiBuffer::push(const RawMidiEvent& msg) {
-    midi_buffer.try_enqueue(msg);
-  }
+bool MidiBuffer::push(const RawMidiEvent& msg) {
+    return midi_buffer.try_enqueue(msg);
+}
 
 
 bool MidiBuffer::peek(RawMidiEvent& outEvent) {
@@ -18,7 +18,7 @@ bool MidiBuffer::peek(RawMidiEvent& outEvent) {
   if (evt == nullptr) {
     return false;
   } else {
-    outEvent.copy(evt);
+    outEvent = *evt;
     return true;
   }
 }

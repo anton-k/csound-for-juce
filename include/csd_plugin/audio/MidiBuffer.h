@@ -21,27 +21,21 @@ struct RawMidiEvent {
     {
         // Fast, zero-allocation copy.
         // We cap at 4 bytes to silently ignore SysEx and guarantee RT-safety.
-        std::memcpy(data, rawData, size);
-    }
-
-    void copy(RawMidiEvent* that) {
-      samplePosition = that->samplePosition;
-      size = that->size;
-      std::memcpy(data, that->data, that->size);
+        if (rawData != nullptr) {
+            std::memcpy(data, rawData, size);
+        }
     }
 };
 
 class MidiBuffer {
   public:
-    MidiBuffer(size_t size): midi_buffer(size) {};
+    MidiBuffer(size_t size): midi_buffer(std::max(size, (size_t)16)) {};
     void clear();
-    void push(const RawMidiEvent& msg);
+    bool push(const RawMidiEvent& msg);
     bool peek(RawMidiEvent& outEvent);
     void pop();
     bool read(RawMidiEvent& outEvent) {
-      bool is_ok = peek(outEvent);
-      pop();
-      return is_ok;
+      return midi_buffer.try_dequeue(outEvent);
     };
 
   private:
