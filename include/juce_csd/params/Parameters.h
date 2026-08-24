@@ -19,7 +19,7 @@ enum class ParameterType {
 struct SmoothedParam {
     juce::AudioParameterFloat* param{nullptr};
     ParameterType type{ParameterType::Continuous};
-    float smoothing_time_ms{10.0f}; // NEW: Store this so prepare() can use it
+    float smoothing_time_ms{10.0f};
 
     float current_value{0.0f};
     float target_value{0.0f};
@@ -40,13 +40,17 @@ struct SmoothedParam {
     }
 
     void set_target(float new_target, bool force_instant = false) {
-        target_value = new_target;
-        if (force_instant || type != ParameterType::Continuous || smoothing_samples == 0) {
-            current_value = target_value;
-            samples_remaining = 0;
-        } else {
-            samples_remaining = smoothing_samples;
-            increment = (target_value - current_value) / static_cast<float>(smoothing_samples);
+        // CRITICAL FIX: Only recalculate if target actually changed
+        if (new_target != target_value || force_instant) {
+            target_value = new_target;
+
+            if (force_instant || type != ParameterType::Continuous || smoothing_samples == 0) {
+                current_value = target_value;
+                samples_remaining = 0;
+            } else {
+                samples_remaining = smoothing_samples;
+                increment = (target_value - current_value) / static_cast<float>(smoothing_samples);
+            }
         }
     }
 
@@ -54,8 +58,8 @@ struct SmoothedParam {
         if (samples_remaining > 0) {
             current_value += increment;
             --samples_remaining;
-            if (samples_remaining == 0) {
-                current_value = target_value;
+            if (samples_remaining <= 0) {
+                current_value = target_value;  // Snap to exact target
             }
         }
         return current_value;
