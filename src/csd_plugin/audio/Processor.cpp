@@ -91,17 +91,13 @@ void Processor::set_host_io() {
 
 void Processor::set_csound_midi_callbacks() {
     csound->SetHostData(this);
-    if (io_layout.has_midi_in) {
-        csound->SetExternalMidiInOpenCallback(&Processor::midi_device_open);
-        csound->SetExternalMidiInCloseCallback(&Processor::midi_device_close);
-        csound->SetExternalMidiReadCallback(&Processor::midi_read);
-    }
+    csound->SetExternalMidiInOpenCallback(&Processor::midi_device_open);
+    csound->SetExternalMidiInCloseCallback(&Processor::midi_device_close);
+    csound->SetExternalMidiReadCallback(&Processor::midi_read);
 
-    if (io_layout.has_midi_out) {
-        csound->SetExternalMidiOutOpenCallback(&Processor::midi_device_open);
-        csound->SetExternalMidiOutCloseCallback(&Processor::midi_device_close);
-        csound->SetExternalMidiWriteCallback(&Processor::midi_write);
-    }
+    csound->SetExternalMidiOutOpenCallback(&Processor::midi_device_open);
+    csound->SetExternalMidiOutCloseCallback(&Processor::midi_device_close);
+    csound->SetExternalMidiWriteCallback(&Processor::midi_write);
 }
 
 int Processor::midi_device_open(CSOUND *csound_, void **user_data, const char *devName) {
@@ -117,7 +113,7 @@ int Processor::midi_device_close(CSOUND *csound_, void *user_data)
 
 int Processor::midi_read(CSOUND* csound, void* userData, unsigned char* buf, int max_size) {
     auto* proc = static_cast<Processor*>(userData);
-    if (!proc) return 0;
+    if (!proc || !(proc->get_io_layout().has_midi_in)) return 0;
 
     auto& queue = proc->midi_buffers.in();
     int cycle_end_sample = proc->current_cycle_end_sample;
@@ -148,6 +144,8 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
 {
     auto csound_host_data = csoundGetHostData(csound_);
     Processor *processor = static_cast<Processor *>(csound_host_data);
+    if (!processor || !(processor->get_io_layout().has_midi_out)) return 0;
+
     csd_plugin::RawMidiEvent midi_event{processor->get_current_sample(), midi_buffer, static_cast<uint8_t>(midi_buffer_size)};
     processor->midi_buffers.out().push(midi_event);
     return 0;
@@ -156,11 +154,11 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
 
 void Processor::setup_csound(int sample_rate) {
     csound = std::unique_ptr<Csound>(new Csound());
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
-    csound->SetOption(options.c_str());
+
     set_host_io();
     set_csound_midi_callbacks();
-    csound->CompileCSD(csd_file_content.c_str(), 1);
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
+    csound->SetOption(options.c_str());    csound->CompileCSD(csd_file_content.c_str(), 1);
     csound->Start();
 }
 
