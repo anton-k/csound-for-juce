@@ -101,10 +101,10 @@ int SyntProcessor::midi_read(CSOUND* csound, void* userData, unsigned char* buf,
     int cycle_end_sample = proc->current_sample_end_sample;
 
     int bytes_written = 0;
-    TimedMidiEvent next_event;
+    RawMidiEvent next_event;
 
     while (queue.peek(next_event)) {
-        int msg_size = next_event.message.getRawDataSize();
+        int msg_size = next_event.size;
 
         if (next_event.samplePosition < cycle_end_sample) {
             if (bytes_written + msg_size > max_size) {
@@ -112,7 +112,7 @@ int SyntProcessor::midi_read(CSOUND* csound, void* userData, unsigned char* buf,
             }
 
             queue.pop();
-            std::memcpy(buf + bytes_written, next_event.message.getRawData(), msg_size);
+            std::memcpy(buf + bytes_written, next_event.data, msg_size);
             bytes_written += msg_size;
         } else {
             break;
@@ -203,7 +203,7 @@ void SyntProcessor::read_midi_from_host(juce::MidiBuffer& host_midi_messages) {
     for (const auto metadata : host_midi_messages) {
         auto msg = metadata.getMessage();
         if (!msg.isSysEx()) {
-            midi_buffer.push(msg, metadata.samplePosition);
+            midi_buffer.push(RawMidiEvent(metadata.samplePosition, msg.getRawData(), msg.getRawDataSize()));
         }
     }
 }

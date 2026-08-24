@@ -1,0 +1,30 @@
+
+#include <juce_csd/audio/MidiBuffer.h>
+
+namespace csd_plugin {
+
+void MidiBuffer::clear() {
+      RawMidiEvent temp;
+      while(midi_buffer.try_dequeue(temp));
+}
+
+void MidiBuffer::push(const RawMidiEvent& msg) {
+    midi_buffer.try_enqueue(msg);
+  }
+
+
+bool MidiBuffer::peek(RawMidiEvent& outEvent) {
+  RawMidiEvent* evt = midi_buffer.peek();
+  if (evt == nullptr) {
+    return false;
+  } else {
+    outEvent.copy(evt);
+    return true;
+  }
+}
+
+void MidiBuffer::pop() {
+  midi_buffer.pop();
+}
+
+};

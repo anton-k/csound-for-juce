@@ -48,12 +48,14 @@ find_library(CSOUND_LIB csound64 REQUIRED)
 add_library(juce_csd STATIC)
 
 target_sources(juce_csd PRIVATE
+    src/csd_plugin/audio/AudioBuffer.cpp
+    src/csd_plugin/audio/MidiBuffer.cpp
+    src/csd_plugin/audio/Processor.cpp
+
     src/juce_csd/params/JsonSerializer.cpp
     src/juce_csd/params/Parameters.cpp
     src/juce_csd/audio/FxProcessor.cpp
     src/juce_csd/audio/SyntProcessor.cpp
-    src/juce_csd/audio/AudioBuffer.cpp
-    src/juce_csd/audio/MidiBuffer.cpp
     src/juce_csd/plugin/FxPluginProcessor.cpp
 )
 

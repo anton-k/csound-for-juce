@@ -58,7 +58,7 @@ class SyntProcessor {
     std::unique_ptr<Csound> csound;
     CsoundSettings csound_settings{};
     AudioBuffers audio_buffers;
-    MidiBuffer midi_buffer;
+    MidiBuffer midi_buffer{1024};
     int csound_cycle_size{0};
     std::string csd_file_content;
     Parameters parameters;
