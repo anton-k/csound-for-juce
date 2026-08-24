@@ -18,36 +18,35 @@ Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spe
     init_sensor_parameters(spec.sensor);
 }
 
-juce::AudioParameterFloat& Parameters::get_audio_parameter_ref(const std::string& name) {
-  return *audio_parameters.at(name);
+juce::AudioParameterFloat& Parameters::get_audio_parameter_ref(const std::string& id) {
+    auto it = audio_parameters.find(id);
+    if (it != audio_parameters.end() && it->second.param != nullptr) {
+        return *(it->second.param);
+    }
+    throw std::runtime_error("Parameter not found: " + id);
 }
 
 void Parameters::init_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterSpec>& param_specs) {
     for (const auto& spec : param_specs) {
         DBG("Creating parameter: " << spec.name);
 
+        juce::NormalisableRange<float> range(spec.min, spec.max, spec.step);
         auto* param = new juce::AudioParameterFloat(
-            spec.id,  // parameterID
-            spec.name,  // parameterName
-            spec.min,  // minValue
-            spec.max,  // maxValue
-            spec.default_value   // defaultValue
-        );
+                spec.id, spec.name, range, spec.default_value);
 
         // Add to processor
         processor.addParameter(param);
 
         // Store pointer
-        audio_parameters.insert(std::pair(spec.id, param));
+        audio_parameters.emplace(spec.id, SmoothedParam(param, spec.type, spec.default_value, spec.smoothing_time_ms));
+
+
     }
 }
 
 void Parameters::init_ui_parameters(const std::vector<UiParameterSpec>& parameter_specs) {
     for (const UiParameterSpec& spec : parameter_specs) {
-        ui_parameters.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(spec.id),
-            std::forward_as_tuple(spec.default_value));
+      ui_parameters.emplace(spec.id, spec.default_value);
     }
 }
 
@@ -60,9 +59,21 @@ void Parameters::init_sensor_parameters(const std::vector<SensorParameterSpec>& 
     }
 }
 
+void Parameters::prepare(double sample_rate, int max_block_size) {
+    for (auto& param : audio_parameters) {
+        param.second.set_sample_rate(static_cast<float>(sample_rate));
+    }
+}
+
 void Parameters::update_on_process(Csound* csound) {
   for (auto& param: audio_parameters) {
-    csound->SetControlChannel(param.first.c_str(), param.second->get());
+    auto& sp = param.second;
+    if (sp.param != nullptr) {
+      float new_target = sp.param->get();
+      sp.set_target(new_target);
+      float value_to_send = sp.process();
+      csound->SetControlChannel(param.first.c_str(), static_cast<double>(value_to_send));
+    }
   }
   for (auto& param: sensor_parameters) {
     param.second.store(csound->GetControlChannel(param.first.c_str()));
@@ -82,7 +93,8 @@ void Parameters::setStateInformation (const void* data, int sizeInBytes)
     if (result.failed()) {
         DBG(result.getErrorMessage());
     }
-    // TODO: smoothe parameter transition
+    // Note: Smoothing is intentionally bypassed during state restoration
+    // via the force_instant = true flag in the deserializer, preventing weird ramping.
 }
 
 void Parameters::set_ui_parameter(const std::string& id, float value) {

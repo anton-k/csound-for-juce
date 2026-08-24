@@ -5,11 +5,64 @@
 #include <optional>
 #include <sys/types.h>
 #include <vector>
+#include <map>
+#include <atomic>
 
 namespace juce_csd {
 
+enum class ParameterType {
+    Continuous,  // Knobs, sliders - smoothing is beneficial
+    Discrete,    // Toggles, switches, step selectors - smoothing breaks `changed` opcode
+    Boolean      // Special case of discrete (0 or 1)
+};
 
-using AudioParameterList = std::map<std::string, juce::AudioParameterFloat*>;
+struct SmoothedParam {
+    juce::AudioParameterFloat* param{nullptr};
+    ParameterType type{ParameterType::Continuous};
+    float smoothing_time_ms{10.0f}; // NEW: Store this so prepare() can use it
+
+    float current_value{0.0f};
+    float target_value{0.0f};
+    float increment{0.0f};
+    int samples_remaining{0};
+    int smoothing_samples{441};
+
+    SmoothedParam(juce::AudioParameterFloat* p, ParameterType t, float default_val, float smooth_ms)
+        : param(p), type(t), current_value(default_val), target_value(default_val), smoothing_time_ms(smooth_ms) {}
+
+    void set_sample_rate(float sample_rate) {
+        if (type == ParameterType::Continuous && smoothing_time_ms > 0.0f) {
+            smoothing_samples = static_cast<int>(sample_rate * (smoothing_time_ms / 1000.0f));
+            if (smoothing_samples < 1) smoothing_samples = 1;
+        } else {
+            smoothing_samples = 0;
+        }
+    }
+
+    void set_target(float new_target, bool force_instant = false) {
+        target_value = new_target;
+        if (force_instant || type != ParameterType::Continuous || smoothing_samples == 0) {
+            current_value = target_value;
+            samples_remaining = 0;
+        } else {
+            samples_remaining = smoothing_samples;
+            increment = (target_value - current_value) / static_cast<float>(smoothing_samples);
+        }
+    }
+
+    float process() {
+        if (samples_remaining > 0) {
+            current_value += increment;
+            --samples_remaining;
+            if (samples_remaining == 0) {
+                current_value = target_value;
+            }
+        }
+        return current_value;
+    }
+};
+
+using AudioParameterList = std::map<std::string, SmoothedParam>;
 using UiParameterList = std::map<std::string, std::atomic<float>>;
 using SensorParameterList = std::map<std::string, std::atomic<float>>;
 
@@ -19,6 +72,8 @@ struct AudioParameterSpec {
   std::string id;
   std::string name;
   float min, max, step, default_value;
+  ParameterType type{ParameterType::Continuous};
+  float smoothing_time_ms{10.0f}; // Only used if type == Continuous
 };
 
 /// UI parameters that needs to be persisted
@@ -47,6 +102,8 @@ class Parameters {
   public:
     Parameters(juce:: AudioProcessor&, const ParameterSpec&);
 
+    void prepare(double sample_rate, int max_block_size);
+
     /// Set audio parameters to Csound and read sensor parameters from Csound
     void update_on_process(Csound* csound);
     void getStateInformation (juce::MemoryBlock& destData);
@@ -69,7 +126,7 @@ class Parameters {
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
+
 };
 
 }
-
