@@ -61,6 +61,14 @@ void CsoundSettings::set_channel_names(Csound* csound) {
   csound->DeleteChannelList(channel_list);
 }
 
+int Processor::get_latency_samples() {
+    if (io_layout.get_in_size() > 0) {
+        return csound_settings.ksmps;
+    } else {
+        return 0;
+    }
+}
+
 void Processor::write_input(float sample) {
     audio_buffers.in().write(csound_settings.zero_dbfs * sample);
 }
