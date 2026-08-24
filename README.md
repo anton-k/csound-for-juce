@@ -33,7 +33,7 @@ So why do we need yet another Csound_JUCE tool if we have Cabbage?
 Cabbage is great if you want to build a plugin entirely from CSD.
 csound-for-juce is for when you want Csound's DSP power inside a JUCE plugin you control.
 Use Cabbage if CSD is your whole plugin with UI produced by Cabbage. Use csound-for-juce if Csound
-is one component of a larger JUCE project with customu UI.
+is one component of a larger JUCE project with custom UI.
 
 Cabbage is a complete plugin authoring environment. You write your CSD file with
 embedded GUI annotations, and Cabbage builds the entire plugin for you — DSP, UI,
