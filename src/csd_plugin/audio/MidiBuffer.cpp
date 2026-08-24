@@ -1,5 +1,5 @@
 
-#include <juce_csd/audio/MidiBuffer.h>
+#include <csd_plugin/audio/MidiBuffer.h>
 
 namespace csd_plugin {
 

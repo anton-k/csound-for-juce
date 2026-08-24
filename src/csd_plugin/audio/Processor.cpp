@@ -1,6 +1,6 @@
 
-#include "juce_csd/audio/AudioBuffer.h"
-#include "juce_csd/audio/MidiBuffer.h"
+#include "csd_plugin/audio/AudioBuffer.h"
+#include "csd_plugin/audio/MidiBuffer.h"
 #include <cstdint>
 #include <juce_csd/audio/Processor.h>
 #include <csound/csound.h>
@@ -36,6 +36,7 @@ void CsoundSettings::prepare(Csound* csound) {
     ksmps = static_cast<size_t>(csound->GetKsmps());
     out_size = static_cast<size_t>(csound->GetChannels(0));
     in_size = static_cast<size_t>(csound->GetChannels(1));
+    sample_rate = csound->GetSr();
     zero_dbfs = csound->Get0dBFS();
     if (zero_dbfs < 0.01) {
         zero_dbfs = 1.f;
@@ -58,6 +59,15 @@ void CsoundSettings::set_channel_names(Csound* csound) {
     }
   }
   csound->DeleteChannelList(channel_list);
+}
+
+void Processor::write_input(float sample) {
+    audio_buffers.in().write(csound_settings.zero_dbfs * sample);
+}
+
+void Processor::read_output(float& sample) {
+    audio_buffers.out().read(sample);
+    sample = wrap_limiter(csound_settings.inverse_zero_dbfs * sample);
 }
 
 void Processor::set_host_io() {
@@ -148,7 +158,7 @@ void Processor::setup_csound(int sample_rate) {
 
 void Processor::prepare_to_play (int sample_rate, int max_block_size)
 {
-    if (!is_ready_to_play) {
+    if (!ready_to_play) {
         setup_csound(sample_rate);
         csound_settings.prepare(csound.get());
         clear_buffers();
@@ -160,19 +170,19 @@ void Processor::prepare_to_play (int sample_rate, int max_block_size)
         }
 
         current_sample = 0;
-        is_ready_to_play = true;
+        ready_to_play = true;
     }
 }
 
 void Processor::process_block(int block_size)
 {
-    if (is_ready_to_play) {
+    if (ready_to_play) {
         csound_process(block_size);
     }
 }
 
 void Processor::release_resources() {
-    is_ready_to_play = false;
+    ready_to_play = false;
     if (csound != nullptr) {
         csound->Reset();
     }

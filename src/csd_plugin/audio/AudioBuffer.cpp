@@ -2,7 +2,7 @@
 #include <atomic>
 #include <memory>
 #include <readerwriterqueue.h>
-#include <juce_csd/audio/AudioBuffer.h>
+#include <csd_plugin/audio/AudioBuffer.h>
 
 using namespace moodycamel;
 namespace csd_plugin {

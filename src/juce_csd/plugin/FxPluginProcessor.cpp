@@ -3,7 +3,8 @@
 #include <string>
 #include "juce_core/juce_core.h"
 #include <juce_csd/params/Parameters.h>
-#include <juce_csd/audio/FxProcessor.h>
+#include <juce_csd/audio/Processor.h>
+#include <csd_plugin/audio/Processor.h>
 
 namespace juce_csd {
 
@@ -12,7 +13,7 @@ FxPluginProcessor::FxPluginProcessor(const std::string& csd_content, const Param
                        .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                        ),
-                           csound(csd_content, spec, *this)
+                           csound(csd_content, csd_plugin::IOLayout::fx_layout(), spec, *this)
 
 {
 }
@@ -73,8 +74,8 @@ void FxPluginProcessor::changeProgramName (int index, const juce::String& newNam
 //==============================================================================
 void FxPluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    csound.prepareToPlay(sampleRate);
-    setLatencySamples(csound.getLatencySamples());
+    csound.prepareToPlay(sampleRate, samplesPerBlock);
+    setLatencySamples(csound.get_latency_samples());
     juce::ignoreUnused (samplesPerBlock);
 }
 
@@ -92,8 +93,7 @@ bool FxPluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 void FxPluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused(midiMessages);
-    csound.processBlock(*this, buffer);
+    csound.processBlock(*this, buffer, midiMessages);
 }
 
 //==============================================================================

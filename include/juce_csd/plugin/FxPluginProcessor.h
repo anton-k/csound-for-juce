@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include "juce_audio_basics/juce_audio_basics.h"
 #include <juce_csd/params/Parameters.h>
-#include <juce_csd/audio/FxProcessor.h>
+#include <juce_csd/audio/Processor.h>
 
 namespace juce_csd {
 
@@ -45,7 +45,7 @@ public:
 
     Parameters& get_parameters() { return csound.get_parameters(); };
 private:
-    FxProcessor csound;
+    Processor csound;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FxPluginProcessor)

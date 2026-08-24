@@ -33,11 +33,16 @@ struct RawMidiEvent {
 
 class MidiBuffer {
   public:
-    MidiBuffer(int size): midi_buffer(size) {};
+    MidiBuffer(size_t size): midi_buffer(size) {};
     void clear();
     void push(const RawMidiEvent& msg);
     bool peek(RawMidiEvent& outEvent);
     void pop();
+    bool read(RawMidiEvent& outEvent) {
+      bool is_ok = peek(outEvent);
+      pop();
+      return is_ok;
+    };
 
   private:
     ReaderWriterQueue<RawMidiEvent> midi_buffer;
@@ -45,7 +50,7 @@ class MidiBuffer {
 
 class MidiBuffers {
   public:
-    MidiBuffers(int in_size, int out_size): in_buffer{in_size}, out_buffer{out_size} {};
+    MidiBuffers(size_t in_size, size_t out_size): in_buffer{in_size}, out_buffer{out_size} {};
 
     MidiBuffer& in() { return in_buffer; };
     MidiBuffer& out() { return out_buffer; };
