@@ -54,12 +54,17 @@ struct SmoothedParam {
         }
     }
 
-    float process() {
+    float process(int block_size) {
         if (samples_remaining > 0) {
-            current_value += increment;
-            --samples_remaining;
+            // Advance by the number of samples in this block (or whatever is left)
+            int steps = std::min(samples_remaining, block_size);
+
+            current_value += increment * static_cast<float>(steps);
+            samples_remaining -= steps;
+
             if (samples_remaining <= 0) {
-                current_value = target_value;  // Snap to exact target
+                current_value = target_value; // Snap to exact target at the end
+                samples_remaining = 0;
             }
         }
         return current_value;
@@ -109,7 +114,7 @@ class Parameters {
     void prepare(double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
-    void update_on_process(Csound* csound);
+    void update_on_process(Csound* csound, int block_size);
     void getStateInformation (juce::MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
 

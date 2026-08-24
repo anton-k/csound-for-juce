@@ -65,13 +65,13 @@ void Parameters::prepare(double sample_rate, int max_block_size) {
     }
 }
 
-void Parameters::update_on_process(Csound* csound) {
+void Parameters::update_on_process(Csound* csound, int block_size) {
   for (auto& param: audio_parameters) {
     auto& sp = param.second;
     if (sp.param != nullptr) {
       float new_target = sp.param->get();
       sp.set_target(new_target);
-      float value_to_send = sp.process();
+      float value_to_send = sp.process(block_size);
       csound->SetControlChannel(param.first.c_str(), static_cast<double>(value_to_send));
     }
   }
