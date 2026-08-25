@@ -166,7 +166,10 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
            }
 
            case (HostParameterType::FrameRate): {
-             set_optional_csound_param(csound, param.id, pos->getFrameRate());
+             auto rate = pos->getFrameRate();
+             if (rate.hasValue()) {
+               csound->SetControlChannel(param.id.c_str(), rate->getBaseRate());
+             }
              break;
            }
          }
