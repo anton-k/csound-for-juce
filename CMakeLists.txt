@@ -55,7 +55,7 @@ target_sources(juce_csd PRIVATE
     src/juce_csd/params/JsonSerializer.cpp
     src/juce_csd/params/Parameters.cpp
     src/juce_csd/audio/Processor.cpp
-    src/juce_csd/plugin/FxPluginProcessor.cpp
+    src/juce_csd/plugin/PluginProcessor.cpp
 )
 
 # ---------------------------------------------------------

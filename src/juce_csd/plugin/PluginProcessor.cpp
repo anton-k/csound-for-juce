@@ -1,6 +1,6 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_csd/plugin/FxPluginProcessor.h>
+#include <juce_csd/plugin/PluginProcessor.h>
 #include <csound/csound.h>
 #include <juce_events/juce_events.h>
 #include <string>

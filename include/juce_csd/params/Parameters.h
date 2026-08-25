@@ -16,6 +16,12 @@ enum class ParameterType {
     Boolean      // Special case of discrete (0 or 1)
 };
 
+namespace {
+bool float_equals(float a, float b, float epsilon = 1e-5f) {
+    return std::abs(a - b) <= epsilon;
+}
+}
+
 struct SmoothedParam {
     juce::AudioParameterFloat* param{nullptr};
     ParameterType type{ParameterType::Continuous};
@@ -28,7 +34,7 @@ struct SmoothedParam {
     int smoothing_samples{441};
 
     SmoothedParam(juce::AudioParameterFloat* p, ParameterType t, float default_val, float smooth_ms)
-        : param(p), type(t), current_value(default_val), target_value(default_val), smoothing_time_ms(smooth_ms) {}
+        : param(p), type(t), smoothing_time_ms(smooth_ms), current_value(default_val), target_value(default_val) {}
 
     void set_sample_rate(float sample_rate) {
         if (type == ParameterType::Continuous && smoothing_time_ms > 0.0f) {
@@ -41,7 +47,7 @@ struct SmoothedParam {
 
     void set_target(float new_target, bool force_instant = false) {
         // CRITICAL FIX: Only recalculate if target actually changed
-        if (new_target != target_value || force_instant) {
+        if (!float_equals(new_target, target_value) || force_instant) {
             target_value = new_target;
 
             if (force_instant || type != ParameterType::Continuous || smoothing_samples == 0) {
