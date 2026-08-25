@@ -24,6 +24,7 @@ class Processor {
     void setStateInformation (const void* data, int sizeInBytes);
     Parameters& get_parameters();
     juce::AudioParameterFloat& get_parameter(const std::string& name);
+    const csd_plugin::IOLayout& get_io_layout() const;
 
   private:
     void read_midi_from_host(juce::MidiBuffer&);

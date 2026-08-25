@@ -36,11 +36,11 @@ class IOLayout {
     bool has_midi_in {false};
     bool has_midi_out {false};
 
-    int get_total_in_size() {
+    int get_total_in_size() const {
       return in_size + sidechain_size;
     }
 
-    int get_out_size() {
+    int get_out_size() const {
       return out_size;
     }
 
@@ -124,7 +124,7 @@ class Processor {
       return ready_to_play;
     };
 
-    IOLayout& get_io_layout() {
+    const IOLayout& get_io_layout() const {
       return io_layout;
     }
     AudioBuffers& get_audio_buffers() {

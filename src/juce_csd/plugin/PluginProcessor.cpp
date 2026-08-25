@@ -52,17 +52,22 @@ PluginProcessor::~PluginProcessor()
 
 bool PluginProcessor::acceptsMidi() const
 {
-    return false;
+    return csound.get_io_layout().has_midi_in;
 }
 
 bool PluginProcessor::producesMidi() const
 {
-    return false;
+    return csound.get_io_layout().has_midi_out;
 }
 
 bool PluginProcessor::isMidiEffect() const
 {
-    return false;
+    int in_size = csound.get_io_layout().get_total_in_size();
+    int out_size = csound.get_io_layout().get_out_size();
+    bool has_midi_in = csound.get_io_layout().has_midi_in;
+    bool has_midi_out = csound.get_io_layout().has_midi_out;
+
+    return has_midi_in && has_midi_out && in_size == 0 && out_size == 0;
 }
 
 double PluginProcessor::getTailLengthSeconds() const
