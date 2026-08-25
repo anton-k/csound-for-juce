@@ -154,9 +154,23 @@ class ParameterAttachments {
           slider_attachments.push_back(std::move(attachment));
       }
 
+      void add_combo_box(const std::string& name,  juce::ComboBox& combo_box) {
+          auto attachment = std::make_unique<juce::ComboBoxParameterAttachment>(parameters.get_audio_parameter_ref(name), combo_box);
+          combo_box_attachments.push_back(std::move(attachment));
+      }
+
+      void add_button(const std::string& name,  juce::Button& button) {
+          auto attachment = std::make_unique<juce::ButtonParameterAttachment>(parameters.get_audio_parameter_ref(name), button);
+          button_attachments.push_back(std::move(attachment));
+      }
+
+
   private:
       Parameters& parameters;
       std::vector<std::unique_ptr<juce::SliderParameterAttachment>> slider_attachments;
+      std::vector<std::unique_ptr<juce::ComboBoxParameterAttachment>> combo_box_attachments;
+      std::vector<std::unique_ptr<juce::ButtonParameterAttachment>> button_attachments;
+
 };
 
 }
