@@ -30,8 +30,8 @@ enum class HostParameterType {
     TimeInSeconds,
     IsPlaying,
     IsRecording,
-    IsLooping,
     FrameRate,
+    IsLooping,
 };
 
 namespace {
