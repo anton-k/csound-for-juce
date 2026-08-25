@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.hpp>
 #include <sys/types.h>
+#include "csd_plugin/audio/Processor.h"
 #include "juce_audio_basics/juce_audio_basics.h"
 #include <juce_csd/params/Parameters.h>
 #include <juce_csd/audio/Processor.h>
@@ -14,7 +15,7 @@ class FxPluginProcessor : public juce::AudioProcessor
 {
 public:
     //==============================================================================
-    FxPluginProcessor(const std::string&, const ParameterSpec&);
+    FxPluginProcessor(const std::string&, const csd_plugin::IOLayout& io_layout, const ParameterSpec&);
     ~FxPluginProcessor() override;
 
     //==============================================================================
@@ -45,6 +46,7 @@ public:
 
     Parameters& get_parameters() { return csound.get_parameters(); };
 private:
+    static juce::AudioProcessor::BusesProperties make_buses_properties(const csd_plugin::IOLayout& io_layout);
     Processor csound;
 
     //==============================================================================

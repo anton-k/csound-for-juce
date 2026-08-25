@@ -72,7 +72,6 @@ class IOLayout {
     }
 
 
-  private:
     int in_size {2};
     int out_size {2};
 };
