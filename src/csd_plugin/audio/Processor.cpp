@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include <ranges>
 
 const float WRAP_VOLUME_LIMIT = 5.0f;
 
@@ -201,7 +202,7 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
 
     if (audio_buffers.out().get_size() == 0) {
         if (io_layout.get_total_in_size() > 0) {
-            for (int index = 0; index < csound_settings.ksmps; index++) {
+            for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
                 audio_buffers.out().write(0.0f);
             }
         }
@@ -238,16 +239,15 @@ void Processor::csound_process(int buffer_size) {
     csound_cycle_size = get_csound_cycle_size(buffer_size);
     int in_size = io_layout.get_total_in_size();
     int out_size = io_layout.get_out_size();
-    int ksmps = csound_settings.ksmps;
 
     float sample{0.0};
-    for (int cycle_index = 0; cycle_index < csound_cycle_size; cycle_index++) {
-        current_cycle_end_sample = current_sample + ksmps;
+    for (int cycle_index: std::ranges::iota_view(0, csound_cycle_size)) {
+        current_cycle_end_sample = current_sample + csound_settings.ksmps;
 
         if (in_size > 0) {
             double* spin = csound->GetSpin();
-            for (int index = 0; index < ksmps; index++) {
-                for (int channel = 0; channel <- in_size; channel++) {
+            for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
+                for (int channel: std::ranges::iota_view(0, in_size)) {
                     if (!audio_buffers.in().read(sample)) {
                         sample = 0.0f;
                     }
@@ -259,8 +259,8 @@ void Processor::csound_process(int buffer_size) {
         csound->PerformKsmps();
 
         const double* spout = csound->GetSpout();
-        for (int index = 0; index < ksmps; index++) {
-            for (int channel = 0; index < out_size; channel++) {
+        for (int index: std::ranges::iota_view(0, static_cast<int>(csound_settings.ksmps))) {
+            for (int channel: std::ranges::iota_view(0, out_size)) {
                 audio_buffers.out().write(spout[out_size * index + channel]);
             }
         }
