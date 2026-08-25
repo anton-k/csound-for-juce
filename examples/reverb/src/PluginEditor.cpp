@@ -7,13 +7,15 @@
 using namespace juce_csd;
 
 //==============================================================================
+
 AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p), font(juce::FontOptions(24.0)),
-    size_param(processorRef.get_parameters().get_audio_parameter_ref(names::size), size_knob),
-    tone_param(processorRef.get_parameters().get_audio_parameter_ref(names::tone), tone_knob),
-    mix_param(processorRef.get_parameters().get_audio_parameter_ref(names::mix), mix_knob),
+    : AudioProcessorEditor (&p), processorRef (p), font(juce::FontOptions(24.0)), parameter_attachments(p.get_parameters()),
     constrainer(new juce::ComponentBoundsConstrainer())
 {
+    parameter_attachments.add_slider(names::size, size_knob);
+    parameter_attachments.add_slider(names::tone, tone_knob);
+    parameter_attachments.add_slider(names::mix, mix_knob);
+
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     for (auto* knob : {&size_knob, &tone_knob, &mix_knob}) {
