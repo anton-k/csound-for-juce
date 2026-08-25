@@ -38,7 +38,7 @@ class IOLayout {
     bool has_midi_out {false};
 
     int get_in_size() {
-      return in_size + (has_sidechain ? 2 : 0);
+      return in_size + (has_sidechain ? std::max(in_size, out_size) : 0);
     }
 
     int get_out_size() {
@@ -55,6 +55,16 @@ class IOLayout {
       return layout;
     };
 
+    static IOLayout synt_mono_layout() {
+      IOLayout layout{};
+      layout.has_sidechain = false;
+      layout.has_midi_in = true;
+      layout.has_midi_out = false;
+      layout.in_size = 0;
+      layout.out_size = 1;
+      return layout;
+    };
+
     static IOLayout fx_layout() {
       IOLayout layout{};
       layout.has_sidechain = false;
@@ -64,6 +74,17 @@ class IOLayout {
       layout.out_size = 2;
       return layout;
     };
+
+    static IOLayout fx_mono_layout() {
+      IOLayout layout{};
+      layout.has_sidechain = false;
+      layout.has_midi_in = false;
+      layout.has_midi_out = false;
+      layout.in_size = 1;
+      layout.out_size = 1;
+      return layout;
+    };
+
 
     IOLayout with_sidechain() {
       IOLayout layout(*this);
