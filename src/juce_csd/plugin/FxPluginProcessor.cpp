@@ -12,7 +12,7 @@
 namespace juce_csd {
 
 
-juce::AudioProcessor::BusesProperties FxPluginProcessor::make_buses_properties(const csd_plugin::IOLayout& io_layout) {
+juce::AudioProcessor::BusesProperties PluginProcessor::make_buses_properties(const csd_plugin::IOLayout& io_layout) {
     BusesProperties bp;
 
     switch (io_layout.in_size) {
@@ -35,97 +35,97 @@ juce::AudioProcessor::BusesProperties FxPluginProcessor::make_buses_properties(c
     return bp;
 }
 
-FxPluginProcessor::FxPluginProcessor(const std::string& csd_content, const csd_plugin::IOLayout& io_layout, const ParameterSpec& spec)
-     : AudioProcessor (FxPluginProcessor::make_buses_properties(io_layout)),
+PluginProcessor::PluginProcessor(const std::string& csd_content, const csd_plugin::IOLayout& io_layout, const ParameterSpec& spec)
+     : AudioProcessor (PluginProcessor::make_buses_properties(io_layout)),
        csound(csd_content, io_layout, spec, *this)
 {
 }
 
-FxPluginProcessor::~FxPluginProcessor()
+PluginProcessor::~PluginProcessor()
 {
 }
 
 //==============================================================================
 
-bool FxPluginProcessor::acceptsMidi() const
+bool PluginProcessor::acceptsMidi() const
 {
     return false;
 }
 
-bool FxPluginProcessor::producesMidi() const
+bool PluginProcessor::producesMidi() const
 {
     return false;
 }
 
-bool FxPluginProcessor::isMidiEffect() const
+bool PluginProcessor::isMidiEffect() const
 {
     return false;
 }
 
-double FxPluginProcessor::getTailLengthSeconds() const
+double PluginProcessor::getTailLengthSeconds() const
 {
     return 0.0;
 }
 
-int FxPluginProcessor::getNumPrograms()
+int PluginProcessor::getNumPrograms()
 {
     return 1;   // NB: some hosts don't cope very well if you tell them there are 0 programs,
                 // so this should be at least 1, even if you're not really implementing programs.
 }
 
-int FxPluginProcessor::getCurrentProgram()
+int PluginProcessor::getCurrentProgram()
 {
     return 0;
 }
 
-void FxPluginProcessor::setCurrentProgram (int index)
+void PluginProcessor::setCurrentProgram (int index)
 {
     juce::ignoreUnused (index);
 }
 
-const juce::String FxPluginProcessor::getProgramName (int index)
+const juce::String PluginProcessor::getProgramName (int index)
 {
     juce::ignoreUnused (index);
     return {};
 }
 
-void FxPluginProcessor::changeProgramName (int index, const juce::String& newName)
+void PluginProcessor::changeProgramName (int index, const juce::String& newName)
 {
     juce::ignoreUnused (index, newName);
 }
 
 //==============================================================================
-void FxPluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     csound.prepareToPlay(sampleRate, samplesPerBlock);
     setLatencySamples(csound.get_latency_samples());
     juce::ignoreUnused (samplesPerBlock);
 }
 
-void FxPluginProcessor::releaseResources()
+void PluginProcessor::releaseResources()
 {
     csound.releaseResources();
 }
 
-bool FxPluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     return (layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
      && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo());
 }
 
-void FxPluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
+void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
     csound.processBlock(*this, buffer, midiMessages);
 }
 
 //==============================================================================
-void FxPluginProcessor::getStateInformation (juce::MemoryBlock& destData)
+void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     csound.getStateInformation(destData);
 }
 
-void FxPluginProcessor::setStateInformation (const void* data, int sizeInBytes)
+void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     csound.setStateInformation(data, sizeInBytes);
 }

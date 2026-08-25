@@ -11,12 +11,12 @@
 namespace juce_csd {
 
 //==============================================================================
-class FxPluginProcessor : public juce::AudioProcessor
+class PluginProcessor : public juce::AudioProcessor
 {
 public:
     //==============================================================================
-    FxPluginProcessor(const std::string&, const csd_plugin::IOLayout& io_layout, const ParameterSpec&);
-    ~FxPluginProcessor() override;
+    PluginProcessor(const std::string&, const csd_plugin::IOLayout& io_layout, const ParameterSpec&);
+    ~PluginProcessor() override;
 
     //==============================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -50,7 +50,7 @@ private:
     Processor csound;
 
     //==============================================================================
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FxPluginProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };
 
 }
