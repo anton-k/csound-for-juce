@@ -49,7 +49,7 @@ int Processor::get_latency_samples() {
 }
 
 void Processor::read_input_buffer_from_host(juce::AudioBuffer<float>& buffer) {
-    int csd_in_size = csound.get_io_layout().get_in_size();
+    int csd_in_size = csound.get_io_layout().get_total_in_size();
     if (csd_in_size > 0) {
         int host_in_size = buffer.getNumChannels();
         int sample_size = buffer.getNumSamples();

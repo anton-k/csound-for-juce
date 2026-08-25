@@ -25,11 +25,13 @@ juce::AudioProcessor::BusesProperties PluginProcessor::make_buses_properties(con
         case 2: bp.addBus(false, "Output", juce::AudioChannelSet::stereo(), true); break;
     }
 
-    // TODO: what about non-stereo side-chain?
+    // Standalon JUCE app has no support for sidechain inputs
     if (!juce::JUCEApplicationBase::isStandaloneApp()) {
-        if (io_layout.has_sidechain) {
-            bp.addBus(true, "Sidechain", juce::AudioChannelSet::stereo(), false);
-
+        if (io_layout.sidechain_size > 0) {
+            switch (io_layout.in_size) {
+                case 1: bp.addBus(true, "Sidechain", juce::AudioChannelSet::mono(), true); break;
+                case 2: bp.addBus(true, "Sidechain", juce::AudioChannelSet::stereo(), true); break;
+            }
         }
     }
 

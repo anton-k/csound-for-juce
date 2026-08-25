@@ -60,7 +60,7 @@ void CsoundSettings::set_channel_names(Csound* csound) {
 }
 
 int Processor::get_latency_samples() {
-    if (io_layout.get_in_size() > 0) {
+    if (io_layout.get_total_in_size() > 0) {
         return csound_settings.ksmps;
     } else {
         return 0;
@@ -212,7 +212,7 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
     // 3. Resize buffers if needed
     if (needs_buffer_resize || needs_reinit) {
         int max_frames = max_block_size + (csound_settings.ksmps * 2);
-        int in_capacity = std::max(1024, max_frames * io_layout.get_in_size());
+        int in_capacity = std::max(1024, max_frames * io_layout.get_total_in_size());
         int out_capacity = std::max(1024, max_frames * io_layout.get_out_size());
 
         audio_buffers.reset(in_capacity, out_capacity);
@@ -221,7 +221,7 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
 
 
     if (audio_buffers.out().get_size() == 0) {
-        if (io_layout.get_in_size() > 0) {
+        if (io_layout.get_total_in_size() > 0) {
             for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
                 audio_buffers.out().write(0.0f);
             }
@@ -257,7 +257,7 @@ void Processor::release_resources() {
 
 void Processor::csound_process(int buffer_size) {
     csound_cycle_size = get_csound_cycle_size(buffer_size);
-    int in_size = io_layout.get_in_size();
+    int in_size = io_layout.get_total_in_size();
     int out_size = io_layout.get_out_size();
 
     float sample{0.0};

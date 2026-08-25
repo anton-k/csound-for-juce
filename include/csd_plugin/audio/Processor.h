@@ -25,7 +25,7 @@ class IOLayout {
   public:
     IOLayout() {};
     IOLayout(const IOLayout& that) {
-      has_sidechain = that.has_sidechain;
+      sidechain_size = that.sidechain_size;
       has_midi_in = that.has_midi_in;
       has_midi_out = that.has_midi_out;
       in_size = that.in_size;
@@ -33,12 +33,11 @@ class IOLayout {
     }
 
 
-    bool has_sidechain {false};
     bool has_midi_in {false};
     bool has_midi_out {false};
 
-    int get_in_size() {
-      return in_size + (has_sidechain ? std::max(in_size, out_size) : 0);
+    int get_total_in_size() {
+      return in_size + sidechain_size;
     }
 
     int get_out_size() {
@@ -47,7 +46,7 @@ class IOLayout {
 
     static IOLayout synt_layout() {
       IOLayout layout{};
-      layout.has_sidechain = false;
+      layout.sidechain_size = 0;
       layout.has_midi_in = true;
       layout.has_midi_out = false;
       layout.in_size = 0;
@@ -57,7 +56,7 @@ class IOLayout {
 
     static IOLayout synt_mono_layout() {
       IOLayout layout{};
-      layout.has_sidechain = false;
+      layout.sidechain_size = 0;
       layout.has_midi_in = true;
       layout.has_midi_out = false;
       layout.in_size = 0;
@@ -67,7 +66,7 @@ class IOLayout {
 
     static IOLayout fx_layout() {
       IOLayout layout{};
-      layout.has_sidechain = false;
+      layout.sidechain_size = 0;
       layout.has_midi_in = false;
       layout.has_midi_out = false;
       layout.in_size = 2;
@@ -77,7 +76,7 @@ class IOLayout {
 
     static IOLayout fx_mono_layout() {
       IOLayout layout{};
-      layout.has_sidechain = false;
+      layout.sidechain_size = 0;
       layout.has_midi_in = false;
       layout.has_midi_out = false;
       layout.in_size = 1;
@@ -86,15 +85,15 @@ class IOLayout {
     };
 
 
-    IOLayout with_sidechain() {
+    IOLayout with_sidechain(int size) {
       IOLayout layout(*this);
-      layout.has_sidechain = true;
+      layout.sidechain_size = size;
       return layout;
     }
 
-
     int in_size {2};
     int out_size {2};
+    int sidechain_size {0};
 };
 
 class Processor {
