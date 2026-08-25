@@ -21,8 +21,8 @@ juce::AudioProcessor::BusesProperties PluginProcessor::make_buses_properties(con
     }
 
     switch (io_layout.out_size) {
-        case 1: bp.addBus(true, "Output", juce::AudioChannelSet::mono(), true); break;
-        case 2: bp.addBus(true, "Output", juce::AudioChannelSet::stereo(), true); break;
+        case 1: bp.addBus(false, "Output", juce::AudioChannelSet::mono(), true); break;
+        case 2: bp.addBus(false, "Output", juce::AudioChannelSet::stereo(), true); break;
     }
 
     if (!juce::JUCEApplicationBase::isStandaloneApp()) {

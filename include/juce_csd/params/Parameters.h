@@ -17,7 +17,7 @@ enum class ParameterType {
 };
 
 namespace {
-bool float_equals(float a, float b, float epsilon = 1e-5f) {
+bool float_equals(float a, float b, float epsilon = 1e-4f) {
     return std::abs(a - b) <= epsilon;
 }
 }
@@ -46,7 +46,6 @@ struct SmoothedParam {
     }
 
     void set_target(float new_target, bool force_instant = false) {
-        // CRITICAL FIX: Only recalculate if target actually changed
         if (!float_equals(new_target, target_value) || force_instant) {
             target_value = new_target;
 
