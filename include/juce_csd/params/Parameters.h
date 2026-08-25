@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.hpp>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <sys/types.h>
 #include <vector>
@@ -141,6 +143,20 @@ class Parameters {
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
 
+};
+
+class ParameterAttachments {
+  public:
+      ParameterAttachments(Parameters& parameters_): parameters(parameters_) {}
+
+      void add_slider(const std::string& name,  juce::Slider& slider) {
+          auto attachment = std::make_unique<juce::SliderParameterAttachment>(parameters.get_audio_parameter_ref(name), slider);
+          slider_attachments.push_back(std::move(attachment));
+      }
+
+  private:
+      Parameters& parameters;
+      std::vector<std::unique_ptr<juce::SliderParameterAttachment>> slider_attachments;
 };
 
 }
