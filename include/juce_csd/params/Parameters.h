@@ -1,5 +1,6 @@
 #pragma once
 
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.hpp>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -16,6 +17,16 @@ enum class ParameterType {
     Continuous,  // Knobs, sliders - smoothing is beneficial
     Discrete,    // Toggles, switches, step selectors - smoothing breaks `changed` opcode
     Boolean      // Special case of discrete (0 or 1)
+};
+
+enum class HostParameterType {
+    Bpm,
+    TimeSigNumerator,
+    TimeSigDenominator,
+    QuarterNotesPosition,
+    TimeInSamples,
+    TimeInSeconds,
+    IsPlaying,
 };
 
 namespace {
@@ -78,10 +89,6 @@ struct SmoothedParam {
     }
 };
 
-using AudioParameterList = std::map<std::string, SmoothedParam>;
-using UiParameterList = std::map<std::string, std::atomic<float>>;
-using SensorParameterList = std::map<std::string, std::atomic<float>>;
-
 /// Parameters for audio control channels that are controlled by UI and host.
 // The audio parameters are updated and set to Csound once per processBlock call.
 struct AudioParameterSpec {
@@ -107,11 +114,22 @@ struct SensorParameterSpec {
   float default_value;
 };
 
+struct HostParameterSpec {
+  std::string id;
+  HostParameterType parameter_type;
+};
+
+using AudioParameterList = std::map<std::string, SmoothedParam>;
+using UiParameterList = std::map<std::string, std::atomic<float>>;
+using SensorParameterList = std::map<std::string, std::atomic<float>>;
+using HostParameterList = std::vector<HostParameterSpec>;
+
 /// Parameter specification. It lists all parameters for the application.
 struct ParameterSpec {
   std::vector<AudioParameterSpec> audio;
-  std::vector<UiParameterSpec> ui;
-  std::vector<SensorParameterSpec> sensor;
+  std::vector<UiParameterSpec> ui{};
+  std::vector<SensorParameterSpec> sensor{};
+  std::vector<HostParameterSpec> host{};
 };
 
 class Parameters {
@@ -121,7 +139,7 @@ class Parameters {
     void prepare(double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
-    void update_on_process(Csound* csound, int block_size);
+    void update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head);
     void getStateInformation (juce::MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
 
@@ -135,10 +153,16 @@ class Parameters {
     void init_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterSpec>&);
     void init_ui_parameters(const std::vector<UiParameterSpec>&);
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
+    void init_host_parameters(const std::vector<HostParameterSpec>&);
+
+    void update_audio_params(Csound* csound, int block_size);
+    void update_sensor_params(Csound* csound);
+    void update_host_params(Csound* csound, juce::AudioPlayHead* play_head);
 
     AudioParameterList audio_parameters;
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
+    HostParameterList host_parameters;
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
@@ -163,7 +187,6 @@ class ParameterAttachments {
           auto attachment = std::make_unique<juce::ButtonParameterAttachment>(parameters.get_audio_parameter_ref(name), button);
           button_attachments.push_back(std::move(attachment));
       }
-
 
   private:
       Parameters& parameters;

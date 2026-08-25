@@ -1,3 +1,4 @@
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_csd/params/Parameters.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.h>
@@ -65,7 +66,13 @@ void Parameters::prepare(double sample_rate, int max_block_size) {
     }
 }
 
-void Parameters::update_on_process(Csound* csound, int block_size) {
+void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
+  update_audio_params(csound, block_size);
+  update_sensor_params(csound);
+  update_host_params(csound, play_head);
+}
+
+void Parameters::update_audio_params(Csound* csound, int block_size) {
   for (auto& param: audio_parameters) {
     auto& sp = param.second;
     if (sp.param != nullptr) {
@@ -75,8 +82,72 @@ void Parameters::update_on_process(Csound* csound, int block_size) {
       csound->SetControlChannel(param.first.c_str(), static_cast<double>(value_to_send));
     }
   }
+}
+
+void Parameters::update_sensor_params(Csound* csound) {
   for (auto& param: sensor_parameters) {
     param.second.store(csound->GetControlChannel(param.first.c_str()));
+  }
+}
+
+namespace {
+  void set_optional_csound_param(Csound* csound, const std::string& name, const juce::Optional<double>& value) {
+     if (value.hasValue()) {
+       csound->SetControlChannel(name.c_str(), *value);
+     }
+  }
+}
+
+void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_head) {
+  if (host_parameters.size() > 0 && play_head != nullptr) {
+     auto pos = play_head->getPosition();
+     if (pos.hasValue()) {
+       for (auto& param: host_parameters) {
+         switch (param.parameter_type) {
+           case (HostParameterType::Bpm): {
+             set_optional_csound_param(csound, param.id, pos->getBpm());
+             break;
+           }
+
+           case (HostParameterType::IsPlaying): {
+             csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
+             break;
+           }
+
+           case (HostParameterType::QuarterNotesPosition): {
+             set_optional_csound_param(csound, param.id, pos->getPpqPosition());
+             break;
+           }
+
+           case (HostParameterType::TimeInSamples): {
+             set_optional_csound_param(csound, param.id, pos->getTimeInSamples());
+             break;
+           }
+
+           case (HostParameterType::TimeInSeconds): {
+             set_optional_csound_param(csound, param.id, pos->getTimeInSeconds());
+             break;
+           }
+
+           case (HostParameterType::TimeSigNumerator): {
+              auto opt_signature = pos->getTimeSignature();
+              if (opt_signature.hasValue()) {
+                csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->numerator));
+              }
+              break;
+           }
+
+           case (HostParameterType::TimeSigDenominator): {
+              auto opt_signature = pos->getTimeSignature();
+              if (opt_signature.hasValue()) {
+                csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->denominator));
+              }
+              break;
+           }
+         }
+       }
+     }
+
   }
 }
 
