@@ -109,16 +109,6 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
              break;
            }
 
-           case (HostParameterType::IsPlaying): {
-             csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
-             break;
-           }
-
-           case (HostParameterType::QuarterNotesPosition): {
-             set_optional_csound_param(csound, param.id, pos->getPpqPosition());
-             break;
-           }
-
            case (HostParameterType::TimeInSamples): {
              set_optional_csound_param(csound, param.id, pos->getTimeInSamples());
              break;
@@ -143,6 +133,41 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
                 csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->denominator));
               }
               break;
+           }
+
+           case (HostParameterType::IsPlaying): {
+             csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
+             break;
+           }
+
+           case (HostParameterType::IsRecording): {
+             csound->SetControlChannel(param.id.c_str(), pos->getIsRecording() ? 1.0 : 0.0);
+             break;
+           }
+
+           case (HostParameterType::IsLooping): {
+             csound->SetControlChannel(param.id.c_str(), pos->getIsLooping() ? 1.0 : 0.0);
+             break;
+           }
+
+           case (HostParameterType::QuarterNotesPosition): {
+             set_optional_csound_param(csound, param.id, pos->getPpqPosition());
+             break;
+           }
+
+           case (HostParameterType::QuarterNotesPositionOfLastBarStart): {
+             set_optional_csound_param(csound, param.id, pos->getPpqPositionOfLastBarStart());
+             break;
+           }
+
+           case (HostParameterType::BarCount): {
+             set_optional_csound_param(csound, param.id, pos->getBarCount());
+             break;
+           }
+
+           case (HostParameterType::FrameRate): {
+             set_optional_csound_param(csound, param.id, pos->getFrameRate());
+             break;
            }
          }
        }

@@ -23,10 +23,15 @@ enum class HostParameterType {
     Bpm,
     TimeSigNumerator,
     TimeSigDenominator,
+    BarCount,
     QuarterNotesPosition,
+    QuarterNotesPositionOfLastBarStart,
     TimeInSamples,
     TimeInSeconds,
     IsPlaying,
+    IsRecording,
+    IsLooping,
+    FrameRate,
 };
 
 namespace {
