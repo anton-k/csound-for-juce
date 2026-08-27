@@ -16,6 +16,7 @@ Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spe
     float_audio_parameters(), bool_audio_parameters(), ui_parameters(), sensor_parameters() {
     init_float_audio_parameters(processor, spec.audio_floats);
     init_bool_audio_parameters(processor, spec.audio_bools);
+    init_choice_audio_parameters(processor, spec.audio_choices);
     init_ui_parameters(spec.ui);
     init_sensor_parameters(spec.sensor);
 }
@@ -25,7 +26,7 @@ juce::AudioParameterFloat& Parameters::get_float_audio_parameter_ref(const std::
     if (it != float_audio_parameters.end() && it->second.param != nullptr) {
         return *(it->second.param);
     }
-    throw std::runtime_error("Parameter not found: " + id);
+    throw std::runtime_error("Float parameter not found: " + id);
 }
 
 juce::AudioParameterBool& Parameters::get_bool_audio_parameter_ref(const std::string& id) {
@@ -33,9 +34,16 @@ juce::AudioParameterBool& Parameters::get_bool_audio_parameter_ref(const std::st
     if (it != bool_audio_parameters.end() && it->second != nullptr) {
         return *(it->second);
     }
-    throw std::runtime_error("Parameter not found: " + id);
+    throw std::runtime_error("Bool parameter not found: " + id);
 }
 
+juce::AudioParameterChoice& Parameters::get_choice_audio_parameter_ref(const std::string& id) {
+    auto it = choice_audio_parameters.find(id);
+    if (it != choice_audio_parameters.end() && it->second != nullptr) {
+        return *(it->second);
+    }
+    throw std::runtime_error("Choice parameter not found: " + id);
+}
 
 void Parameters::init_float_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterFloatSpec>& param_specs) {
     for (const auto& spec : param_specs) {
@@ -65,6 +73,20 @@ void Parameters::init_bool_audio_parameters(juce::AudioProcessor& processor, con
     }
 }
 
+void Parameters::init_choice_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterChoiceSpec>& param_specs) {
+    for (const auto& spec : param_specs) {
+        DBG("Creating choice parameter: " << spec.name);
+        auto* param = new juce::AudioParameterChoice(spec.id, spec.name, spec.choices, spec.default_value);
+
+        // Add to processor
+        processor.addParameter(param);
+
+        // Store pointer
+        choice_audio_parameters.emplace(spec.id, param);
+    }
+}
+
+
 
 void Parameters::init_ui_parameters(const std::vector<UiParameterSpec>& parameter_specs) {
     for (const UiParameterSpec& spec : parameter_specs) {
@@ -90,6 +112,7 @@ void Parameters::prepare(double sample_rate, int max_block_size) {
 void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
   update_float_audio_params(csound, block_size);
   update_bool_audio_params(csound);
+  update_choice_audio_params(csound);
   update_sensor_params(csound);
   update_host_params(csound, play_head);
 }
@@ -113,6 +136,15 @@ void Parameters::update_bool_audio_params(Csound* csound) {
     }
   }
 }
+
+void Parameters::update_choice_audio_params(Csound* csound) {
+  for (auto& param: choice_audio_parameters) {
+    if (param.second != nullptr) {
+      csound->SetControlChannel(param.first.c_str(), param.second->getIndex());
+    }
+  }
+}
+
 
 void Parameters::update_sensor_params(Csound* csound) {
   for (auto& param: sensor_parameters) {
@@ -212,13 +244,13 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
 void Parameters::getStateInformation (juce::MemoryBlock& destData)
 {
     juce::MemoryOutputStream os{destData, true};
-    JsonSerializer::serialize(float_audio_parameters, bool_audio_parameters, ui_parameters, os);
+    JsonSerializer::serialize(float_audio_parameters, bool_audio_parameters, choice_audio_parameters, ui_parameters, os);
 }
 
 void Parameters::setStateInformation (const void* data, int sizeInBytes)
 {
     juce::MemoryInputStream is{data, static_cast<size_t>(sizeInBytes), false};
-    const juce::Result result = JsonSerializer::deserialize(is, float_audio_parameters, bool_audio_parameters, ui_parameters);
+    const juce::Result result = JsonSerializer::deserialize(is, float_audio_parameters, bool_audio_parameters, choice_audio_parameters, ui_parameters);
     if (result.failed()) {
         DBG(result.getErrorMessage());
     }

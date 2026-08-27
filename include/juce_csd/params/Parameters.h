@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.hpp>
+#include <juce_core/juce_core.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -112,6 +113,15 @@ struct AudioParameterBoolSpec {
   bool default_value;
 };
 
+/// Parameters for audio control channels that are controlled by UI and host.
+// The audio parameters are updated and set to Csound once per processBlock call.
+struct AudioParameterChoiceSpec {
+  std::string id;
+  std::string name;
+  juce::StringArray choices;
+  int default_value;
+};
+
 /// UI parameters that needs to be persisted
 struct UiParameterSpec {
   std::string id;
@@ -134,6 +144,7 @@ struct HostParameterSpec {
 
 using AudioParameterFloatList = std::map<std::string, SmoothedParam>;
 using AudioParameterBoolList = std::map<std::string, juce::AudioParameterBool*>;
+using AudioParameterChoiceList = std::map<std::string, juce::AudioParameterChoice*>;
 using UiParameterList = std::map<std::string, std::atomic<float>>;
 using SensorParameterList = std::map<std::string, std::atomic<float>>;
 using HostParameterList = std::vector<HostParameterSpec>;
@@ -142,6 +153,7 @@ using HostParameterList = std::vector<HostParameterSpec>;
 struct ParameterSpec {
   std::vector<AudioParameterFloatSpec> audio_floats{};
   std::vector<AudioParameterBoolSpec> audio_bools{};
+  std::vector<AudioParameterChoiceSpec> audio_choices{};
   std::vector<UiParameterSpec> ui{};
   std::vector<SensorParameterSpec> sensor{};
   std::vector<HostParameterSpec> host{};
@@ -160,6 +172,7 @@ class Parameters {
 
     juce::AudioParameterFloat& get_float_audio_parameter_ref(const std::string&);
     juce::AudioParameterBool& get_bool_audio_parameter_ref(const std::string&);
+    juce::AudioParameterChoice& get_choice_audio_parameter_ref(const std::string&);
 
     std::optional<float> get_ui_parameter(const std::string& id);
     void set_ui_parameter(const std::string& id, float value);
@@ -168,17 +181,20 @@ class Parameters {
   private:
     void init_float_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterFloatSpec>&);
     void init_bool_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterBoolSpec>&);
+    void init_choice_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterChoiceSpec>&);
     void init_ui_parameters(const std::vector<UiParameterSpec>&);
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
     void update_float_audio_params(Csound* csound, int block_size);
     void update_bool_audio_params(Csound* csound);
+    void update_choice_audio_params(Csound* csound);
     void update_sensor_params(Csound* csound);
     void update_host_params(Csound* csound, juce::AudioPlayHead* play_head);
 
     AudioParameterFloatList float_audio_parameters;
     AudioParameterBoolList bool_audio_parameters;
+    AudioParameterChoiceList choice_audio_parameters;
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
     HostParameterList host_parameters;
@@ -198,7 +214,7 @@ class ParameterAttachments {
       }
 
       void add_combo_box(const std::string& name,  juce::ComboBox& combo_box) {
-          auto attachment = std::make_unique<juce::ComboBoxParameterAttachment>(parameters.get_float_audio_parameter_ref(name), combo_box);
+          auto attachment = std::make_unique<juce::ComboBoxParameterAttachment>(parameters.get_choice_audio_parameter_ref(name), combo_box);
           combo_box_attachments.push_back(std::move(attachment));
       }
 
@@ -212,7 +228,6 @@ class ParameterAttachments {
       std::vector<std::unique_ptr<juce::SliderParameterAttachment>> slider_attachments;
       std::vector<std::unique_ptr<juce::ComboBoxParameterAttachment>> combo_box_attachments;
       std::vector<std::unique_ptr<juce::ButtonParameterAttachment>> button_attachments;
-
 };
 
 }

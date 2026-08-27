@@ -9,7 +9,7 @@ using json = nlohmann::json;
 
 namespace juce_csd {
 
-void JsonSerializer::serialize(const AudioParameterFloatList &float_audio_parameters, const AudioParameterBoolList &bool_audio_parameters, const UiParameterList& ui_parameters, juce::OutputStream &output) {
+void JsonSerializer::serialize(const AudioParameterFloatList &float_audio_parameters, const AudioParameterBoolList &bool_audio_parameters, const AudioParameterChoiceList &choice_audio_parameters, const UiParameterList& ui_parameters, juce::OutputStream &output) {
     json json_data;
 
     json_data["audio"] = json::object();
@@ -25,6 +25,13 @@ void JsonSerializer::serialize(const AudioParameterFloatList &float_audio_parame
         }
     }
 
+    for (const auto& pair : choice_audio_parameters) {
+        if (pair.second != nullptr) {
+            json_data["audio"][pair.first] = pair.second->getIndex();
+        }
+    }
+
+
     json_data["ui"] = json::object();
     for (const auto& pair : ui_parameters) {
         json_data["ui"][pair.first] = pair.second.load();
@@ -34,7 +41,7 @@ void JsonSerializer::serialize(const AudioParameterFloatList &float_audio_parame
     output.writeString(juce::String(json_string));
 }
 
-juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParameterFloatList &float_audio_parameters, AudioParameterBoolList &bool_audio_parameters, UiParameterList& ui_parameters) {
+juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParameterFloatList &float_audio_parameters, AudioParameterBoolList &bool_audio_parameters, AudioParameterChoiceList &choice_audio_parameters, UiParameterList& ui_parameters) {
     std::string raw_json = input.readEntireStreamAsString().toStdString();
     if (raw_json.empty()) {
         return juce::Result::fail("Empty state data");
@@ -60,8 +67,14 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
                     float saved_value = parsed_json["audio"][id].get<float>();
+                    pair.second->setValueNotifyingHost(saved_value);
+                }
+            }
 
-                    // CRITICAL: Force instant update to prevent smoothing ramps when loading presets
+            for (auto& pair : choice_audio_parameters) {
+                const std::string& id = pair.first;
+                if (parsed_json["audio"].contains(id)) {
+                    float saved_value = parsed_json["audio"][id].get<float>();
                     pair.second->setValueNotifyingHost(saved_value);
                 }
             }
