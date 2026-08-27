@@ -31,6 +31,12 @@ void JsonSerializer::serialize(const AudioParameterList &audio_parameters, const
         }
     }
 
+    for (const auto& pair : audio_parameters.ints) {
+        if (pair.second != nullptr) {
+            json_data["audio"][pair.first] = pair.second->get();
+        }
+    }
+
 
     json_data["ui"] = json::object();
     for (const auto& pair : ui_parameters) {
@@ -66,7 +72,15 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
             for (auto& pair : audio_parameters.bools) {
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
-                    float saved_value = parsed_json["audio"][id].get<float>();
+                    float saved_value = parsed_json["audio"][id].get<bool>();
+                    pair.second->setValueNotifyingHost(saved_value);
+                }
+            }
+
+            for (auto& pair : audio_parameters.ints) {
+                const std::string& id = pair.first;
+                if (parsed_json["audio"].contains(id)) {
+                    float saved_value = parsed_json["audio"][id].get<int>();
                     pair.second->setValueNotifyingHost(saved_value);
                 }
             }
@@ -74,7 +88,7 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
             for (auto& pair : audio_parameters.choices) {
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
-                    float saved_value = parsed_json["audio"][id].get<float>();
+                    float saved_value = parsed_json["audio"][id].get<int>();
                     pair.second->setValueNotifyingHost(saved_value);
                 }
             }

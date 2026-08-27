@@ -122,6 +122,14 @@ struct AudioParameterChoiceSpec {
   int default_value;
 };
 
+/// Parameters for audio control channels that are controlled by UI and host.
+// The audio parameters are updated and set to Csound once per processBlock call.
+struct AudioParameterIntSpec {
+  std::string id;
+  std::string name;
+  int min, max, step, default_value;
+};
+
 /// UI parameters that needs to be persisted
 struct UiParameterSpec {
   std::string id;
@@ -145,11 +153,13 @@ struct HostParameterSpec {
 using AudioParameterFloatList = std::map<std::string, SmoothedParam>;
 using AudioParameterBoolList = std::map<std::string, juce::AudioParameterBool*>;
 using AudioParameterChoiceList = std::map<std::string, juce::AudioParameterChoice*>;
+using AudioParameterIntList = std::map<std::string, juce::AudioParameterInt*>;
 
 struct AudioParameterList {
     AudioParameterFloatList floats{};
     AudioParameterBoolList bools{};
     AudioParameterChoiceList choices{};
+    AudioParameterIntList ints{};
 };
 
 using UiParameterList = std::map<std::string, std::atomic<float>>;
@@ -161,6 +171,7 @@ struct ParameterSpec {
   std::vector<AudioParameterFloatSpec> audio_floats{};
   std::vector<AudioParameterBoolSpec> audio_bools{};
   std::vector<AudioParameterChoiceSpec> audio_choices{};
+  std::vector<AudioParameterChoiceSpec> audio_ints{};
   std::vector<UiParameterSpec> ui{};
   std::vector<SensorParameterSpec> sensor{};
   std::vector<HostParameterSpec> host{};
@@ -180,6 +191,7 @@ class Parameters {
     juce::AudioParameterFloat& get_float_audio_parameter_ref(const std::string&);
     juce::AudioParameterBool& get_bool_audio_parameter_ref(const std::string&);
     juce::AudioParameterChoice& get_choice_audio_parameter_ref(const std::string&);
+    juce::AudioParameterInt& get_int_audio_parameter_ref(const std::string&);
 
     std::optional<float> get_ui_parameter(const std::string& id);
     void set_ui_parameter(const std::string& id, float value);
@@ -189,6 +201,7 @@ class Parameters {
     void init_float_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterFloatSpec>&);
     void init_bool_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterBoolSpec>&);
     void init_choice_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterChoiceSpec>&);
+    void init_int_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterIntSpec>&);
     void init_ui_parameters(const std::vector<UiParameterSpec>&);
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
@@ -196,6 +209,7 @@ class Parameters {
     void update_float_audio_params(Csound* csound, int block_size);
     void update_bool_audio_params(Csound* csound);
     void update_choice_audio_params(Csound* csound);
+    void update_int_audio_params(Csound* csound);
     void update_sensor_params(Csound* csound);
     void update_host_params(Csound* csound, juce::AudioPlayHead* play_head);
 

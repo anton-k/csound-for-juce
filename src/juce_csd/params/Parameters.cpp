@@ -45,6 +45,16 @@ juce::AudioParameterChoice& Parameters::get_choice_audio_parameter_ref(const std
     throw std::runtime_error("Choice parameter not found: " + id);
 }
 
+juce::AudioParameterInt& Parameters::get_int_audio_parameter_ref(const std::string& id) {
+    auto it = audio_parameters.ints.find(id);
+    if (it != audio_parameters.ints.end() && it->second != nullptr) {
+        return *(it->second);
+    }
+    throw std::runtime_error("Int parameter not found: " + id);
+}
+
+
+
 void Parameters::init_float_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterFloatSpec>& param_specs) {
     for (const auto& spec : param_specs) {
         DBG("Creating float parameter: " << spec.name);
@@ -86,6 +96,19 @@ void Parameters::init_choice_audio_parameters(juce::AudioProcessor& processor, c
     }
 }
 
+void Parameters::init_int_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterIntSpec>& param_specs) {
+    for (const auto& spec : param_specs) {
+        DBG("Creating integer parameter: " << spec.name);
+        auto* param = new juce::AudioParameterInt(spec.id, spec.name, spec.min, spec.max, spec.default_value);
+
+        // Add to processor
+        processor.addParameter(param);
+
+        // Store pointer
+        audio_parameters.ints.emplace(spec.id, param);
+    }
+}
+
 
 
 void Parameters::init_ui_parameters(const std::vector<UiParameterSpec>& parameter_specs) {
@@ -113,6 +136,7 @@ void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPl
   update_float_audio_params(csound, block_size);
   update_bool_audio_params(csound);
   update_choice_audio_params(csound);
+  update_int_audio_params(csound);
   update_sensor_params(csound);
   update_host_params(csound, play_head);
 }
@@ -140,11 +164,18 @@ void Parameters::update_bool_audio_params(Csound* csound) {
 void Parameters::update_choice_audio_params(Csound* csound) {
   for (auto& param: audio_parameters.choices) {
     if (param.second != nullptr) {
-      csound->SetControlChannel(param.first.c_str(), param.second->getIndex());
+      csound->SetControlChannel(param.first.c_str(), static_cast<double>(param.second->getIndex()));
     }
   }
 }
 
+void Parameters::update_int_audio_params(Csound* csound) {
+  for (auto& param: audio_parameters.bools) {
+    if (param.second != nullptr) {
+      csound->SetControlChannel(param.first.c_str(), static_cast<double>(param.second->get()));
+    }
+  }
+}
 
 void Parameters::update_sensor_params(Csound* csound) {
   for (auto& param: sensor_parameters) {
