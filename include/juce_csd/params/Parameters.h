@@ -145,6 +145,13 @@ struct HostParameterSpec {
 using AudioParameterFloatList = std::map<std::string, SmoothedParam>;
 using AudioParameterBoolList = std::map<std::string, juce::AudioParameterBool*>;
 using AudioParameterChoiceList = std::map<std::string, juce::AudioParameterChoice*>;
+
+struct AudioParameterList {
+    AudioParameterFloatList floats{};
+    AudioParameterBoolList bools{};
+    AudioParameterChoiceList choices{};
+};
+
 using UiParameterList = std::map<std::string, std::atomic<float>>;
 using SensorParameterList = std::map<std::string, std::atomic<float>>;
 using HostParameterList = std::vector<HostParameterSpec>;
@@ -192,9 +199,7 @@ class Parameters {
     void update_sensor_params(Csound* csound);
     void update_host_params(Csound* csound, juce::AudioPlayHead* play_head);
 
-    AudioParameterFloatList float_audio_parameters;
-    AudioParameterBoolList bool_audio_parameters;
-    AudioParameterChoiceList choice_audio_parameters;
+    AudioParameterList audio_parameters;
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
     HostParameterList host_parameters;
