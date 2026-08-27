@@ -203,7 +203,7 @@ class ParameterAttachments {
       }
 
       void add_button(const std::string& name,  juce::Button& button) {
-          auto attachment = std::make_unique<juce::ButtonParameterAttachment>(parameters.get_float_audio_parameter_ref(name), button);
+          auto attachment = std::make_unique<juce::ButtonParameterAttachment>(parameters.get_bool_audio_parameter_ref(name), button);
           button_attachments.push_back(std::move(attachment));
       }
 
