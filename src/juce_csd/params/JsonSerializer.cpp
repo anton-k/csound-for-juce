@@ -91,7 +91,7 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
             for (auto& pair : audio_parameters.choices) {
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
-                    float saved_value = parsed_json["audio"][id].get<int>();
+                    float saved_value = parsed_json["audio"][id].get<float>();
                     pair.second->setParameterIndex(saved_value);
                 }
             }
