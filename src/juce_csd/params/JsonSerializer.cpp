@@ -27,7 +27,10 @@ void JsonSerializer::serialize(const AudioParameterList &audio_parameters, const
 
     for (const auto& pair : audio_parameters.choices) {
         if (pair.second != nullptr) {
-            json_data["audio"][pair.first] = pair.second->getIndex();
+            int index = pair.second->getIndex();
+            juce::NormalisableRange<float> range = pair.second->getNormalisableRange();
+
+            json_data["audio"][pair.first] = range.convertTo0to1(index);
         }
     }
 
@@ -89,7 +92,7 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
                     float saved_value = parsed_json["audio"][id].get<int>();
-                    pair.second->setValueNotifyingHost(saved_value);
+                    pair.second->setParameterIndex(saved_value);
                 }
             }
         }
