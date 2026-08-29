@@ -110,8 +110,6 @@ void Parameters::init_int_audio_parameters(juce::AudioProcessor& processor, cons
     }
 }
 
-
-
 void Parameters::init_ui_parameters(const std::vector<UiParameterSpec>& parameter_specs) {
     for (const UiParameterSpec& spec : parameter_specs) {
       ui_parameters.emplace(spec.id, spec.default_value);
