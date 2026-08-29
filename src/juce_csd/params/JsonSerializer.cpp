@@ -110,10 +110,6 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
                     float normalized_value = parsed_json["audio"][id].get<float>();
-
-                    // THIS IS THE CRITICAL FIX:
-                    // setValueNotifyingHost correctly updates the internal index of AudioParameterChoice
-                    // based on the normalized value, WITHOUT corrupting the parameter's array index.
                     pair.second->setValueNotifyingHost(normalized_value);
                 }
             }
