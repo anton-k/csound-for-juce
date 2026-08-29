@@ -17,6 +17,7 @@ Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spe
     init_float_audio_parameters(processor, spec.audio_floats);
     init_bool_audio_parameters(processor, spec.audio_bools);
     init_choice_audio_parameters(processor, spec.audio_choices);
+    init_int_audio_parameters(processor, spec.audio_ints);
     init_ui_parameters(spec.ui);
     init_sensor_parameters(spec.sensor);
 }
@@ -170,7 +171,7 @@ void Parameters::update_choice_audio_params(Csound* csound) {
 }
 
 void Parameters::update_int_audio_params(Csound* csound) {
-  for (auto& param: audio_parameters.bools) {
+  for (auto& param: audio_parameters.ints) {
     if (param.second != nullptr) {
       csound->SetControlChannel(param.first.c_str(), static_cast<double>(param.second->get()));
     }

@@ -171,7 +171,7 @@ struct ParameterSpec {
   std::vector<AudioParameterFloatSpec> audio_floats{};
   std::vector<AudioParameterBoolSpec> audio_bools{};
   std::vector<AudioParameterChoiceSpec> audio_choices{};
-  std::vector<AudioParameterChoiceSpec> audio_ints{};
+  std::vector<AudioParameterIntSpec> audio_ints{};
   std::vector<UiParameterSpec> ui{};
   std::vector<SensorParameterSpec> sensor{};
   std::vector<HostParameterSpec> host{};
