@@ -4,6 +4,7 @@
 
 using namespace juce_csd;
 
+/// Defines all names for plugin parameters
 namespace names {
 
 static const std::string size("size");
@@ -15,6 +16,7 @@ static const std::string window_height("window_height");
 
 }
 
+/// Defines default values for the parameters
 namespace values {
 
 static const int window_height = 250;

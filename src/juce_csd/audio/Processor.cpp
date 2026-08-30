@@ -132,10 +132,6 @@ void Processor::setStateInformation (const void* data, int sizeInBytes) {
   parameters.setStateInformation(data, sizeInBytes);
 }
 
-juce::AudioParameterFloat& Processor::get_parameter(const std::string& name) {
-    return parameters.get_float_audio_parameter_ref(name);
-}
-
 const csd_plugin::IOLayout& Processor::get_io_layout() const {
     return csound.get_io_layout();
 }

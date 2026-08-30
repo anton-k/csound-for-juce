@@ -11,6 +11,9 @@
 namespace juce_csd {
 
 //==============================================================================
+/// Can be used as parent to inherit from for the plugin which uses Csound for audio processing.
+// It defines all methods to process audio and manages parameters. User of this class
+// only needs to implement methods related to the UI (hasEditor, createEditor and also getName of the plugin).
 class PluginProcessor : public juce::AudioProcessor
 {
 public:

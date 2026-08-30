@@ -4,6 +4,10 @@
 
 using namespace juce_csd;
 
+/// Defines specification of the parameters for the plugin.
+// Reverb plugin has 3 audio float parameters which define
+// size of the reverb, how much frequencies of reflections are not dumped, and mix for dry/wet ratio.
+// Single choice parameter controlls reverb type.
 ParameterSpec init_parameter_spec() {
     std::vector<AudioParameterFloatSpec> audio_floats_spec =
             { AudioParameterFloatSpec(names::size, names::size, 0.0, 1.0, 0.01, 0.3 ),

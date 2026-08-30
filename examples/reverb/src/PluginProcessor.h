@@ -5,6 +5,9 @@
 #include "const.h"
 #include "EmbeddedCsd.h"
 
+/// To implement our plugin which is based on Csound we inherit from the PluginProcessor class.
+// After that we have only 3 methods to implement. getName - to get the plugin name,
+// hasEditor - to tell to the host that plugin has UI. And createEditor to create UI.
 class AudioPluginAudioProcessor final : public juce_csd::PluginProcessor
 {
 public:
