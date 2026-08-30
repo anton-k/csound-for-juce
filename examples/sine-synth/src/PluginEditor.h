@@ -32,7 +32,7 @@ private:
     /// parameter labels
     juce::Label attack_label, decay_label, sustain_label, release_label, gain_label;
 
-    ///  font for the labels
+    /// font for the labels
     juce::Font font;
 
     /// parameter attachments to link between UI-controls and Csound parameters
