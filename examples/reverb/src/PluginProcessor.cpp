@@ -1,6 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+const std::string& csdContent = EmbeddedCsd::getReverbCsd();
+
+
 bool AudioPluginAudioProcessor::hasEditor() const
 {
     return true;

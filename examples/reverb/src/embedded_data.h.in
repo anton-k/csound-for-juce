@@ -1,7 +1,9 @@
 #pragma once
 
+#include <string>
 #include <string_view>
 
 inline std::string getEmbeddedCsd() {
-    return std::string(R"(@EMBEDDED_CONTENT@)");
+    static const std::string data(R"(@EMBEDDED_CONTENT@)");
+    return data;
 }

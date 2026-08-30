@@ -10,12 +10,16 @@ ParameterSpec init_parameter_spec() {
              AudioParameterFloatSpec(names::tone, names::tone, 0.0, 1.0, 0.01, 1.0 ),
              AudioParameterFloatSpec(names::mix, names::mix, 0.0, 1.0, 0.01, 0.12 )};
 
+    std::vector<AudioParameterChoiceSpec> audio_choices_spec =
+            { AudioParameterChoiceSpec(names::reverb_type, "Reverb type", {"Sean Costello", "Freeverb", "Nverb"}, 1) };
+
     std::vector<UiParameterSpec> ui_spec =
-            { UiParameterSpec(names::window_height, 200.0),
-              UiParameterSpec(names::window_width, 400.0)
+            { UiParameterSpec(names::window_height, values::window_height),
+              UiParameterSpec(names::window_width, values::window_width)
             };
     return ParameterSpec
         { .audio_floats = audio_floats_spec
+        , .audio_choices = audio_choices_spec
         , .ui = ui_spec
         };
 }
