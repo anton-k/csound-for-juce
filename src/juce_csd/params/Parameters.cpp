@@ -260,84 +260,84 @@ namespace {
 }
 
 void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_head) {
-  if (host_parameters.size() > 0 && play_head != nullptr) {
-     auto pos = play_head->getPosition();
-     if (pos.hasValue()) {
-       for (auto& param: host_parameters) {
-         switch (param.parameter_type) {
-           case (HostParameterType::Bpm): {
-             set_optional_csound_param(csound, param.id, pos->getBpm());
-             break;
-           }
+  if (host_parameters.empty() || play_head == nullptr) return;
 
-           case (HostParameterType::TimeInSamples): {
-             set_optional_csound_param(csound, param.id, pos->getTimeInSamples());
-             break;
-           }
+  auto pos_info = play_head->getPosition();
+  if (!pos_info.hasValue()) return;
+  auto pos = pos_info;
 
-           case (HostParameterType::TimeInSeconds): {
-             set_optional_csound_param(csound, param.id, pos->getTimeInSeconds());
-             break;
-           }
+   for (auto& param: host_parameters) {
+     switch (param.parameter_type) {
+       case (HostParameterType::Bpm): {
+         set_optional_csound_param(csound, param.id, pos->getBpm());
+         break;
+       }
 
-           case (HostParameterType::TimeSigNumerator): {
-              auto opt_signature = pos->getTimeSignature();
-              if (opt_signature.hasValue()) {
-                csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->numerator));
-              }
-              break;
-           }
+       case (HostParameterType::TimeInSamples): {
+         set_optional_csound_param(csound, param.id, pos->getTimeInSamples());
+         break;
+       }
 
-           case (HostParameterType::TimeSigDenominator): {
-              auto opt_signature = pos->getTimeSignature();
-              if (opt_signature.hasValue()) {
-                csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->denominator));
-              }
-              break;
-           }
+       case (HostParameterType::TimeInSeconds): {
+         set_optional_csound_param(csound, param.id, pos->getTimeInSeconds());
+         break;
+       }
 
-           case (HostParameterType::IsPlaying): {
-             csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
-             break;
-           }
+       case (HostParameterType::TimeSigNumerator): {
+          auto opt_signature = pos->getTimeSignature();
+          if (opt_signature.hasValue()) {
+            csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->numerator));
+          }
+          break;
+       }
 
-           case (HostParameterType::IsRecording): {
-             csound->SetControlChannel(param.id.c_str(), pos->getIsRecording() ? 1.0 : 0.0);
-             break;
-           }
+       case (HostParameterType::TimeSigDenominator): {
+          auto opt_signature = pos->getTimeSignature();
+          if (opt_signature.hasValue()) {
+            csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->denominator));
+          }
+          break;
+       }
 
-           case (HostParameterType::IsLooping): {
-             csound->SetControlChannel(param.id.c_str(), pos->getIsLooping() ? 1.0 : 0.0);
-             break;
-           }
+       case (HostParameterType::IsPlaying): {
+         csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
+         break;
+       }
 
-           case (HostParameterType::QuarterNotesPosition): {
-             set_optional_csound_param(csound, param.id, pos->getPpqPosition());
-             break;
-           }
+       case (HostParameterType::IsRecording): {
+         csound->SetControlChannel(param.id.c_str(), pos->getIsRecording() ? 1.0 : 0.0);
+         break;
+       }
 
-           case (HostParameterType::QuarterNotesPositionOfLastBarStart): {
-             set_optional_csound_param(csound, param.id, pos->getPpqPositionOfLastBarStart());
-             break;
-           }
+       case (HostParameterType::IsLooping): {
+         csound->SetControlChannel(param.id.c_str(), pos->getIsLooping() ? 1.0 : 0.0);
+         break;
+       }
 
-           case (HostParameterType::BarCount): {
-             set_optional_csound_param(csound, param.id, pos->getBarCount());
-             break;
-           }
+       case (HostParameterType::QuarterNotesPosition): {
+         set_optional_csound_param(csound, param.id, pos->getPpqPosition());
+         break;
+       }
 
-           case (HostParameterType::FrameRate): {
-             auto rate = pos->getFrameRate();
-             if (rate.hasValue()) {
-               csound->SetControlChannel(param.id.c_str(), rate->getBaseRate());
-             }
-             break;
-           }
+       case (HostParameterType::QuarterNotesPositionOfLastBarStart): {
+         set_optional_csound_param(csound, param.id, pos->getPpqPositionOfLastBarStart());
+         break;
+       }
+
+       case (HostParameterType::BarCount): {
+         set_optional_csound_param(csound, param.id, pos->getBarCount());
+         break;
+       }
+
+       case (HostParameterType::FrameRate): {
+         auto rate = pos->getFrameRate();
+         if (rate.hasValue()) {
+           csound->SetControlChannel(param.id.c_str(), rate->getBaseRate());
          }
+         break;
        }
      }
-
-  }
+   }
 }
 
 void Parameters::getStateInformation (juce::MemoryBlock& destData)
