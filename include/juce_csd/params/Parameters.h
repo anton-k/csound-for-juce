@@ -11,6 +11,7 @@
 #include <vector>
 #include <map>
 #include <atomic>
+#include <variant>
 
 namespace juce_csd {
 
@@ -177,6 +178,30 @@ struct ParameterSpec {
   std::vector<HostParameterSpec> host{};
 };
 
+using ParameterPtr = std::variant<
+    SmoothedParam*,
+    juce::AudioParameterBool*,
+    juce::AudioParameterChoice*,
+    juce::AudioParameterInt*>;
+
+struct CachedParam {
+    const char* id;
+    ParameterPtr param_ptr;
+
+    double previous_value{0.0};
+    bool has_been_initialized{false};
+
+    bool has_changed(double new_value, double epsilon = 1e-6) const {
+        if (!has_been_initialized) return true;
+        return std::abs(new_value - previous_value) > epsilon;
+    }
+
+    void update_value(double new_value) {
+        previous_value = new_value;
+        has_been_initialized = true;
+    }
+};
+
 class Parameters {
   public:
     Parameters(juce:: AudioProcessor&, const ParameterSpec&);
@@ -206,6 +231,7 @@ class Parameters {
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
+    void update_cached_audio_params(Csound* csound, int block_size);
     void update_float_audio_params(Csound* csound, int block_size);
     void update_bool_audio_params(Csound* csound);
     void update_choice_audio_params(Csound* csound);
@@ -217,6 +243,7 @@ class Parameters {
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
     HostParameterList host_parameters;
+    std::vector<CachedParam> cached_parameters;
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
