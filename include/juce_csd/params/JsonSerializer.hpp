@@ -5,6 +5,12 @@
 
 namespace juce_csd {
 
+/**
+ * @class JsonSerializer
+ * @brief Defines serialization for the application parameters (state).
+ *
+ * The Plugin's state is converted to/from JSON for persistance.
+ */
 class JsonSerializer {
   public:
     static void serialize(const AudioParameterList&, const UiParameterList&, juce::OutputStream&);

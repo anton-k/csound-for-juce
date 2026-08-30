@@ -15,25 +15,30 @@
 
 namespace juce_csd {
 
+/**
+ * @brief Defines weather we should smooth parameter changes.
+ */
 enum class ParameterType {
-    Continuous,  // Knobs, sliders - smoothing is beneficial
-    Discrete,    // Toggles, switches, step selectors - smoothing breaks `changed` opcode
-    Boolean      // Special case of discrete (0 or 1)
+    Continuous,  // Smoothing is applied to eliminate zipper noize on parameter change
+    Discrete,    // No parameter smoothing is applied
 };
 
+/**
+ * @brief Parameter types which can be read from the host application
+ */
 enum class HostParameterType {
-    Bpm,
-    TimeSigNumerator,
-    TimeSigDenominator,
-    BarCount,
-    QuarterNotesPosition,
+    Bpm,  //< Reads BPM (beats per minute)
+    TimeSigNumerator, //< reads numerator of the time signature
+    TimeSigDenominator, //< reads denominator of the time signature
+    BarCount, //< current bar count
+    QuarterNotesPosition, //< double that denotes play-head position in quarters
     QuarterNotesPositionOfLastBarStart,
-    TimeInSamples,
-    TimeInSeconds,
-    IsPlaying,
-    IsRecording,
-    FrameRate,
-    IsLooping,
+    TimeInSamples, //< time in samples
+    TimeInSeconds, //< time in seconds
+    IsPlaying, //< is host playing
+    IsRecording, //< is host recording
+    IsLooping, //< is host looping
+    FrameRate, //< frame rate for a video
 };
 
 namespace {
@@ -42,6 +47,10 @@ bool float_equals(float a, float b, float epsilon = 1e-4f) {
 }
 }
 
+/*
+ * @class SmoothedParam
+ * @brief Smoothing of the parameter changes to eliminate zipper noize
+ */
 struct SmoothedParam {
     juce::AudioParameterFloat* param{nullptr};
     ParameterType type{ParameterType::Continuous};
@@ -96,66 +105,86 @@ struct SmoothedParam {
     }
 };
 
-/// Parameters for audio control channels that are controlled by UI and host.
+/// Float parameters for audio control channels that are controlled by UI and host.
 // The audio parameters are updated and set to Csound once per processBlock call.
 struct AudioParameterFloatSpec {
-  std::string id;
-  std::string name;
-  float min, max, step, default_value;
-  ParameterType type{ParameterType::Continuous};
-  float smoothing_time_ms{10.0f}; // Only used if type == Continuous
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  std::string name; ///< parameter name as it is displayed in the host
+  float min; ///< minimum value
+  float max; ///< maximum value
+  float step; ///< step of the change
+  float default_value; ///< default value
+  ParameterType type{ParameterType::Continuous}; ///< should wee apply smoothing
+  float smoothing_time_ms{10.0f}; ///< Time for smoothing ramp. Only used if type == Continuous
 };
 
-/// Parameters for audio control channels that are controlled by UI and host.
+/// Boolean parameters for audio control channels that are controlled by UI and host.
 // The audio parameters are updated and set to Csound once per processBlock call.
 struct AudioParameterBoolSpec {
-  std::string id;
-  std::string name;
-  bool default_value;
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  std::string name; ///< parameter name as it is displayed in the host
+  bool default_value; ///< default parameter value
 };
 
-/// Parameters for audio control channels that are controlled by UI and host.
+/// Choice parameters for audio control channels that are controlled by UI and host.
 // The audio parameters are updated and set to Csound once per processBlock call.
+//
+// Choice starts from 1, zero value means nothing is selected. Integer values of 1-based indexes
+// are written into Csound control channel.
 struct AudioParameterChoiceSpec {
-  std::string id;
-  std::string name;
-  juce::StringArray choices;
-  int default_value;
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  std::string name; ///< parameter name as it is displayed in the host
+  juce::StringArray choices; ///< names for the choices
+  int default_value; ///< defaul choice (index is 1-based, 0 means nothing is selected)
 };
 
-/// Parameters for audio control channels that are controlled by UI and host.
+/// Integer parameters for audio control channels that are controlled by UI and host.
 // The audio parameters are updated and set to Csound once per processBlock call.
 struct AudioParameterIntSpec {
-  std::string id;
-  std::string name;
-  int min, max, step, default_value;
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  std::string name; ///< parameter name as it is displayed in the host
+  int min; ///< minimum value
+  int max; ///< maximum value
+  int step; ///< step of value change
+  int default_value; ///< default value
 };
 
 /// UI parameters that needs to be persisted
 struct UiParameterSpec {
-  std::string id;
-  float default_value;
+  std::string id; ///< parameter id
+  float default_value; ///< default value
 };
 
 /// Sensor parameters are values which are read from Csound by UI.
 // For example it can be a value for a volume meter.
 //
 // The sensor parameters are updated and read from Csound once per processBlock call.
+// The values of sensor parameters are not persisted
 struct SensorParameterSpec {
-  std::string id;
-  float default_value;
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  float default_value; ///< default value
 };
 
+/// Host parameters read values from Host (BPM, play-head position etc.)
 struct HostParameterSpec {
-  std::string id;
-  HostParameterType parameter_type;
+  std::string id; ///< parameter id (Csound control channel should have the same name)
+  HostParameterType parameter_type; ///< type of the parameter to read from the host
 };
 
+/// List of float audio parameters
 using AudioParameterFloatList = std::map<std::string, SmoothedParam>;
+
+
+/// List of boolean audio parameters
 using AudioParameterBoolList = std::map<std::string, juce::AudioParameterBool*>;
+
+/// List of choice audio parameters
 using AudioParameterChoiceList = std::map<std::string, juce::AudioParameterChoice*>;
+
+/// List of integer audio parameters
 using AudioParameterIntList = std::map<std::string, juce::AudioParameterInt*>;
 
+/// Structure of all audio parameters of the plugin
 struct AudioParameterList {
     AudioParameterFloatList floats{};
     AudioParameterBoolList bools{};
@@ -163,27 +192,37 @@ struct AudioParameterList {
     AudioParameterIntList ints{};
 };
 
+/// UI parameter list
 using UiParameterList = std::map<std::string, std::atomic<float>>;
+
+/// Sensor parameter list
 using SensorParameterList = std::map<std::string, std::atomic<float>>;
+
+/// Host parameter list
 using HostParameterList = std::vector<HostParameterSpec>;
 
 /// Parameter specification. It lists all parameters for the application.
 struct ParameterSpec {
-  std::vector<AudioParameterFloatSpec> audio_floats{};
-  std::vector<AudioParameterBoolSpec> audio_bools{};
-  std::vector<AudioParameterChoiceSpec> audio_choices{};
-  std::vector<AudioParameterIntSpec> audio_ints{};
-  std::vector<UiParameterSpec> ui{};
-  std::vector<SensorParameterSpec> sensor{};
-  std::vector<HostParameterSpec> host{};
+  std::vector<AudioParameterFloatSpec> audio_floats{}; ///< float audio parameters
+  std::vector<AudioParameterBoolSpec> audio_bools{}; ///< boolean audio parameters
+  std::vector<AudioParameterChoiceSpec> audio_choices{}; ///< choice audio parameters
+  std::vector<AudioParameterIntSpec> audio_ints{}; ///< integer audio parameters
+  std::vector<UiParameterSpec> ui{}; ///< UI parameters
+  std::vector<SensorParameterSpec> sensor{}; ///< sensor parameters
+  std::vector<HostParameterSpec> host{}; ///< parameters which are read from the host
 };
 
+/// Parameter pointer
 using ParameterPtr = std::variant<
     SmoothedParam*,
     juce::AudioParameterBool*,
     juce::AudioParameterChoice*,
     juce::AudioParameterInt*>;
 
+
+/// Cached parameter. structure for efficient update of the Csound parameters
+// It ensures that parameter update is not triggered over Csound API if values
+// has not changed
 struct CachedParam {
     const char* id;
     ParameterPtr param_ptr;
@@ -202,24 +241,43 @@ struct CachedParam {
     }
 };
 
+/// Plugin parameters
 class Parameters {
   public:
     Parameters(juce:: AudioProcessor&, const ParameterSpec&);
 
+    /// Method is called on prepareToPlay phase of the plugin
     void prepare(double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
     void update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head);
+
+    /// Serializes the parameters to JSON. Only audio and UI parameters are persisted
     void getStateInformation (juce::MemoryBlock& destData);
+
+    /// Deserializes the parameters from JSON. Only audio and UI parameters are persisted
     void setStateInformation (const void* data, int sizeInBytes);
 
+    /// Gets reference to the float auio parameter by ID
     juce::AudioParameterFloat& get_float_audio_parameter_ref(const std::string&);
+
+    /// Gets reference to the boolean auio parameter by ID
     juce::AudioParameterBool& get_bool_audio_parameter_ref(const std::string&);
+
+    /// Gets reference to the choice auio parameter by ID
     juce::AudioParameterChoice& get_choice_audio_parameter_ref(const std::string&);
+
+    /// Gets reference to the integer auio parameter by ID
     juce::AudioParameterInt& get_int_audio_parameter_ref(const std::string&);
 
+    /// Reads current value of the UI parameter by ID
     std::optional<float> get_ui_parameter(const std::string& id);
+
+    /// Sets current value of the UI parameter by ID
     void set_ui_parameter(const std::string& id, float value);
+
+    /// Reads current value of the sensor. Sensors are updated (read from Csound) once per block
+    // processing
     std::optional<float> get_sensor_parameter(const std::string& id);
 
   private:
@@ -250,20 +308,25 @@ class Parameters {
 
 };
 
+/// Attachments connect audio parameters with UI elements that control them.
+// It allows for bi-directional link between updates of parameters between UI and Csound audio engine.
 class ParameterAttachments {
   public:
       ParameterAttachments(Parameters& parameters_): parameters(parameters_) {}
 
+      /// Adds parameter attachment updated with slider (or knob)
       void add_slider(const std::string& name,  juce::Slider& slider) {
           auto attachment = std::make_unique<juce::SliderParameterAttachment>(parameters.get_float_audio_parameter_ref(name), slider);
           slider_attachments.push_back(std::move(attachment));
       }
 
+      /// Adds parameter attachment updated with combo box (drop-down list)
       void add_combo_box(const std::string& name,  juce::ComboBox& combo_box) {
           auto attachment = std::make_unique<juce::ComboBoxParameterAttachment>(parameters.get_choice_audio_parameter_ref(name), combo_box);
           combo_box_attachments.push_back(std::move(attachment));
       }
 
+      /// Adds parameter attachment updated with buttons (toggle)
       void add_button(const std::string& name,  juce::Button& button) {
           auto attachment = std::make_unique<juce::ButtonParameterAttachment>(parameters.get_bool_audio_parameter_ref(name), button);
           button_attachments.push_back(std::move(attachment));
