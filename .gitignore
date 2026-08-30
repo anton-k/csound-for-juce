@@ -1,4 +1,5 @@
 build/
 examples/reverb/build
+examples/sine-synth/build
 compile_commands.json
 .cache
