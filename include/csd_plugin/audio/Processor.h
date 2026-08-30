@@ -9,6 +9,7 @@
 
 namespace csd_plugin {
 
+/// Settings for Csound file
 struct CsoundSettings {
     CsoundSettings();
     void prepare(Csound*);
@@ -21,6 +22,7 @@ struct CsoundSettings {
     std::vector<std::string> channel_names;
 };
 
+/// Layout of the IO-busses. How many inputs/outputs. Does it have MIDI or side-chain.
 class IOLayout {
   public:
     IOLayout() {};
@@ -32,14 +34,15 @@ class IOLayout {
       out_size = that.out_size;
     }
 
+    bool has_midi_in {false}; ///< Has MIDI input
+    bool has_midi_out {false}; ///< Has MIDI output
 
-    bool has_midi_in {false};
-    bool has_midi_out {false};
-
+    /// Total size equals to the sum of input and sidechain busses
     int get_total_in_size() const {
       return in_size + sidechain_size;
     }
 
+    /// Returns size of the output busses
     int get_out_size() const {
       return out_size;
     }
@@ -91,13 +94,15 @@ class IOLayout {
       return layout;
     }
 
-    int in_size {2};
-    int out_size {2};
-    int sidechain_size {0};
+    int in_size {2}; ///< how many inputs (stereo is 2)
+    int out_size {2}; ///< how many outputs (stereo is 2)
+    int sidechain_size {0}; ///< size of the side-chain  inputs
 };
 
+/// Defines audio processing with Csound
 class Processor {
   public:
+    /// Constructs processor with the content of CSD-file, layout of the IO-busses
     Processor(const std::string& csd, const IOLayout& io_layout_):
       csound(nullptr),
       csd_file_content(csd),
@@ -107,40 +112,66 @@ class Processor {
       csound.reset();
     };
 
+    /// Called prior to audio processing. It compiles the CSD-file and instantiates
+    // the buffers and reads all constants from Csoun dsettings that are needed for audio processing
     void prepare_to_play(int sample_rate, int max_block_size);
+
+    /// Process the audio with given block size. It's assumed that when it is
+    // called audio samples from the DAW/Host are already written in the input audio buffer
+    // as well as MIDI events are written to the MIDI input buffer. After processing
+    // the appllication can read processed samples form the output audio buffer and
+    // MIDI events from the output MIDI buffer.
     void process_block(int block_size);
+
+    /// Releases resources. Called after audio processing has stopped
     void release_resources();
 
+    /// Reads raw pointer to the Csound API
     Csound* get_csound() {
       return csound.get();
     };
 
+    /// Reads latency in samples. If processor has no inputs latency is zero,
+    // of it has inputs it equals to the ksmps.
     int get_latency_samples();
 
+    // TODO: define the same read/write functions for MIDI-buffers
+
+    /// Writes sample to the input audio buffer. Use it prior to process_block to read
+    // all samples from the host
     void write_input(float sample);
+
+    /// Reads sample from the output audio buffer. Use it after process_block to read
+    // read sampels processed with Csound and write them to the host.
     void read_output(float& sample);
 
+    /// Is Csound ready to play
     bool is_ready_to_play() {
       return ready_to_play;
     };
 
+    /// Returns IO-layout of the processr
     const IOLayout& get_io_layout() const {
       return io_layout;
     }
+
+    /// Returns audio buffers
     AudioBuffers& get_audio_buffers() {
       return audio_buffers;
     }
 
+    /// Returns midi buffers
     MidiBuffers& get_midi_buffers() {
       return midi_buffers;
     }
 
+    /// Reads Csound settings
     CsoundSettings& get_csound_settings() {
       return csound_settings;
     }
 
+    /// Returns absolute processing time in samples (How many samples were processed so far from the call to prepare_to_play)
     int get_current_sample();
-
 
   private:
     void csound_process(int block_size);
