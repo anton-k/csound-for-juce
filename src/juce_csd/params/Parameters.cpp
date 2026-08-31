@@ -214,56 +214,49 @@ void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPl
 void Parameters::update_cached_audio_params(Csound* csound, int block_size) {
   for (auto& cached : cached_parameters) {
     double value_to_send = 0.0;
-    bool should_send = false;
     std::visit([&](auto* param) {
       using ParamType = std::remove_pointer_t<decltype(param)>;
 
-      if constexpr (std::is_same_v<ParamType, SmoothedParam>) {
-        // Float parameter with smoothing
-        if (param != nullptr && param->param != nullptr) {
-            float new_target = param->param->get();
-            param->set_target(new_target);
-            value_to_send = param->process(block_size);
-            should_send = cached.has_changed(value_to_send, 1e-6);
+      if (param != nullptr) {
+        if constexpr (std::is_same_v<ParamType, SmoothedParam>) {
+          // Float parameter with smoothing
+          if (param->param != nullptr) {
+              float new_target = param->param->get();
+              param->set_target(new_target);
+              value_to_send = param->process(block_size);
+              cached.set_value(csound, value_to_send);
+          }
+        }
+        else if constexpr (std::is_same_v<ParamType, juce::AudioParameterBool>) {
+            // Boolean parameter
+            value_to_send = param->get() ? 1.0 : 0.0;
+            cached.set_value(csound, value_to_send);
+        }
+        else if constexpr (std::is_same_v<ParamType, juce::AudioParameterChoice>) {
+            // Choice parameter
+            value_to_send = static_cast<double>(param->getIndex());
+            cached.set_value(csound, value_to_send);
+        }
+        else if constexpr (std::is_same_v<ParamType, juce::AudioParameterInt>) {
+            // Integer parameter
+            value_to_send = static_cast<double>(param->get());
+            cached.set_value(csound, value_to_send);
         }
       }
-      else if constexpr (std::is_same_v<ParamType, juce::AudioParameterBool>) {
-          // Boolean parameter
-          if (param != nullptr) {
-              value_to_send = param->get() ? 1.0 : 0.0;
-              should_send = cached.has_changed(value_to_send);
-          }
-      }
-      else if constexpr (std::is_same_v<ParamType, juce::AudioParameterChoice>) {
-          // Choice parameter
-          if (param != nullptr) {
-              value_to_send = static_cast<double>(param->getIndex());
-              should_send = cached.has_changed(value_to_send);
-          }
-      }
-      else if constexpr (std::is_same_v<ParamType, juce::AudioParameterInt>) {
-          // Integer parameter
-          if (param != nullptr) {
-              value_to_send = static_cast<double>(param->get());
-              should_send = cached.has_changed(value_to_send);
-          }
-      }
     }, cached.param_ptr);
-
-    // Only call Csound API if value has changed
-    if (should_send) {
-      cached.set_value(csound, value_to_send);
-    }
   }
 }
 
 void CachedParam::set_value(Csound* csound, double value_to_send) {
-    if (channel_ptr != nullptr) {
-      *static_cast<MYFLT*>(channel_ptr) = static_cast<MYFLT>(value_to_send);
-    } else {
-      csound->SetControlChannel(id.c_str(), value_to_send);
+    // Only call Csound API if value has changed
+    if (has_changed(value_to_send)) {
+      if (channel_ptr != nullptr) {
+        *static_cast<MYFLT*>(channel_ptr) = static_cast<MYFLT>(value_to_send);
+      } else {
+        csound->SetControlChannel(id.c_str(), value_to_send);
+      }
+      update_value(value_to_send);
     }
-    update_value(value_to_send);
 }
 
 void Parameters::update_float_audio_params(Csound* csound, int block_size) {
