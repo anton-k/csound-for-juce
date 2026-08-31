@@ -786,5 +786,14 @@ Artefacts are generated inside the build directory:
 build/src/ReverbCsdExample_artefacts/
 ```
 
+### Useful tips for building plugins.
+
+It can take quite some time on the first build.
+It's better to learn how to use [`ccache`](https://github.com/ccache/ccache)
+to speed up the build process.
+Prefer ninja build syystem as in example. Tune CPM manager to use global cache.
+So that we don't have to download JUCE many times for every project. As JUCE
+is quite heavy.
+
 That's it. We have defined our JUCE and Csound plugin. See the examples
 for more plugins and how to make them.
