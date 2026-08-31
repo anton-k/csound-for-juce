@@ -25,9 +25,12 @@ the audio loop and parameters, while you focus on sound design and your UI.
 
 **Who it's for**: audio developers who want to harness Csound's decades of DSP innovation inside a JUCE plugin they fully control — and who'd rather write their own shiny UI than fight with C's threading and channel APIs.
 
-Get started: see [`examples/`](https://github.com/anton-k/csound-for-juce/tree/main/examples) and
-[Quick start guide](), also check out the repo [`reverb-csd-juce`]() for an example on how to
-use the library with Cmake in your own project.
+Get started:
+
+* [`examples/`](https://github.com/anton-k/csound-for-juce/tree/main/examples)
+* [Quick start guide](https://github.com/anton-k/csound-for-juce/blob/main/tutorial/QuickStartGuide.md)
+* check out the repo [`reverb-csd-juce`](https://github.com/anton-k/reverb-csd-juce)
+   for an example on how to use the library with Cmake in your own project.
 
 ## Comparison to Cabbage
 
