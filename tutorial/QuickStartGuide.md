@@ -786,6 +786,9 @@ Artefacts are generated inside the build directory:
 build/src/ReverbCsdExample_artefacts/
 ```
 
+to test the plugin in the DAW, copy the plugin from the artefacts directory
+to the directory where your DAW watches for the plugins.
+
 ### Useful tips for building plugins.
 
 It can take quite some time on the first build.

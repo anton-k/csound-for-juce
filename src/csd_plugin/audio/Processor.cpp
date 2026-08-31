@@ -202,7 +202,8 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
 
     if (audio_buffers.out().get_size() == 0) {
         if (io_layout.get_total_in_size() > 0) {
-            for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
+            int prefill_size = csound_settings.ksmps * io_layout.get_out_size();
+            for (int index: std::ranges::iota_view(0, prefill_size)) {
                 audio_buffers.out().write(0.0f);
             }
         }

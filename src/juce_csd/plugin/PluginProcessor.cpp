@@ -28,7 +28,7 @@ juce::AudioProcessor::BusesProperties PluginProcessor::make_buses_properties(con
     // Standalon JUCE app has no support for sidechain inputs
     if (!juce::JUCEApplicationBase::isStandaloneApp()) {
         if (io_layout.sidechain_size > 0) {
-            switch (io_layout.in_size) {
+            switch (io_layout.sidechain_size) {
                 case 1: bp.addBus(true, "Sidechain", juce::AudioChannelSet::mono(), true); break;
                 case 2: bp.addBus(true, "Sidechain", juce::AudioChannelSet::stereo(), true); break;
             }
@@ -117,8 +117,14 @@ void PluginProcessor::releaseResources()
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return (layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
-     && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo());
+    auto layout = csound.get_io_layout();
+
+    return (layouts.getMainOutputChannelSet().size() == layout.get_out_size()
+     && (layouts.getMainInputChannelSet().size() == layout.get_total_in_size() ||
+         layouts.getMainInputChannelSet().size() == layout.in_size
+        )
+
+    );
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,

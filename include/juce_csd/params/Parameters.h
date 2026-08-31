@@ -224,7 +224,7 @@ using ParameterPtr = std::variant<
 // It ensures that parameter update is not triggered over Csound API if values
 // has not changed
 struct CachedParam {
-    const char* id;
+    std::string id;
     ParameterPtr param_ptr;
 
     double previous_value{0.0};

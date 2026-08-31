@@ -137,22 +137,22 @@ void Parameters::prepare(double sample_rate, int max_block_size) {
     // Cache float parameters
     for (auto& [id, param] : audio_parameters.floats) {
         param.set_sample_rate(static_cast<float>(sample_rate));
-        cached_parameters.push_back(CachedParam{id.c_str(), ParameterPtr(&param)});
+        cached_parameters.push_back(CachedParam{id, ParameterPtr(&param)});
     }
 
     // Cache bool parameters
     for (auto& [id, param] : audio_parameters.bools) {
-        cached_parameters.push_back(CachedParam{id.c_str(), ParameterPtr(param)});
+        cached_parameters.push_back(CachedParam{id, ParameterPtr(param)});
     }
 
     // Cache int parameters
     for (auto& [id, param] : audio_parameters.ints) {
-        cached_parameters.push_back(CachedParam{id.c_str(), ParameterPtr(param)});
+        cached_parameters.push_back(CachedParam{id, ParameterPtr(param)});
     }
 
     // Cache choice parameters
     for (auto& [id, param] : audio_parameters.choices) {
-        cached_parameters.push_back(CachedParam{id.c_str(), ParameterPtr(param)});
+        cached_parameters.push_back(CachedParam{id, ParameterPtr(param)});
     }
 }
 
@@ -203,7 +203,7 @@ void Parameters::update_cached_audio_params(Csound* csound, int block_size) {
 
     // Only call Csound API if value has changed
     if (should_send) {
-        csound->SetControlChannel(cached.id, value_to_send);
+        csound->SetControlChannel(cached.id.c_str(), value_to_send);
         cached.update_value(value_to_send);
     }
   }
