@@ -31,21 +31,17 @@ chn_k "release", 1, 2, 0.6, 0, 1
 kgain chngetk "gain"
 printk2 kgain
 
-kattack chngetk "attack"
-printk2 kattack
-iattack = i(kattack) + 0.01
+iattack chnget "attack"
+iattack = iattack + 0.01
 
-kdecay chngetk "decay"
-printk2 kdecay
-idecay = i(kdecay) + 0.001
+idecay chnget "decay"
+idecay = idecay + 0.001
 
-ksustain chngetk "sustain"
-printk2 ksustain
-isustain = i(ksustain) + 0.0
+isustain chnget "sustain"
+isustain = isustain + 0.001
 
-krelease chngetk "release"
-printk2 krelease
-irelease = i(krelease) + 0.01
+irelease chnget "release"
+irelease = irelease + 0.01
 
 iNote notnum
 iamp ampmidi 1.0

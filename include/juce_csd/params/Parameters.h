@@ -41,12 +41,6 @@ enum class HostParameterType {
     FrameRate, //< frame rate for a video
 };
 
-namespace {
-bool float_equals(float a, float b, float epsilon = 1e-4f) {
-    return std::abs(a - b) <= epsilon;
-}
-}
-
 /*
  * @class SmoothedParam
  * @brief Smoothing of the parameter changes to eliminate zipper noize
@@ -62,47 +56,10 @@ struct SmoothedParam {
     int samples_remaining{0};
     int smoothing_samples{441};
 
-    SmoothedParam(juce::AudioParameterFloat* p, ParameterType t, float default_val, float smooth_ms)
-        : param(p), type(t), smoothing_time_ms(smooth_ms), current_value(default_val), target_value(default_val) {}
-
-    void set_sample_rate(float sample_rate) {
-        if (type == ParameterType::Continuous && smoothing_time_ms > 0.0f) {
-            smoothing_samples = static_cast<int>(sample_rate * (smoothing_time_ms / 1000.0f));
-            if (smoothing_samples < 1) smoothing_samples = 1;
-        } else {
-            smoothing_samples = 0;
-        }
-    }
-
-    void set_target(float new_target, bool force_instant = false) {
-        if (!float_equals(new_target, target_value) || force_instant) {
-            target_value = new_target;
-
-            if (force_instant || type != ParameterType::Continuous || smoothing_samples == 0) {
-                current_value = target_value;
-                samples_remaining = 0;
-            } else {
-                samples_remaining = smoothing_samples;
-                increment = (target_value - current_value) / static_cast<float>(smoothing_samples);
-            }
-        }
-    }
-
-    float process(int block_size) {
-        if (samples_remaining > 0) {
-            // Advance by the number of samples in this block (or whatever is left)
-            int steps = std::min(samples_remaining, block_size);
-
-            current_value += increment * static_cast<float>(steps);
-            samples_remaining -= steps;
-
-            if (samples_remaining <= 0) {
-                current_value = target_value; // Snap to exact target at the end
-                samples_remaining = 0;
-            }
-        }
-        return current_value;
-    }
+    SmoothedParam(juce::AudioParameterFloat* p, ParameterType t, float default_val, float smooth_ms);
+    void set_sample_rate(float sample_rate);
+    void set_target(float new_target, bool force_instant = false);
+    float process(int block_size);
 };
 
 /// Float parameters for audio control channels that are controlled by UI and host.

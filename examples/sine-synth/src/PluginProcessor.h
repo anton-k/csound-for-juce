@@ -8,7 +8,7 @@
 class AudioPluginAudioProcessor final : public juce_csd::PluginProcessor
 {
 public:
-    AudioPluginAudioProcessor(): juce_csd::PluginProcessor(EmbeddedCsd::getMainCsd(), csd_plugin::IOLayout::synt_layout(), init_parameter_spec()){};
+    AudioPluginAudioProcessor(): juce_csd::PluginProcessor(EmbeddedCsd::getMainCsd(), csd_plugin::IOLayout::synt(), init_parameter_spec()){};
     ~AudioPluginAudioProcessor() override {};
 
     juce::AudioProcessorEditor* createEditor() override;

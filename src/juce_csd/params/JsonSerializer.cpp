@@ -32,9 +32,7 @@ void JsonSerializer::serialize(const AudioParameterList &audio_parameters, const
     // 3. Choices: Use the NormalisableRange to convert the 0-based index to 0.0 - 1.0
     for (const auto& pair : audio_parameters.choices) {
         if (pair.second != nullptr) {
-            int index = pair.second->getIndex();
-            float normalized_value = pair.second->getNormalisableRange().convertTo0to1(static_cast<float>(index));
-            json_data["audio"][pair.first] = normalized_value;
+            json_data["audio"][pair.first] = pair.second->getIndex();
         }
     }
 
@@ -109,7 +107,9 @@ juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParamete
                 if (pair.second == nullptr) continue;
                 const std::string& id = pair.first;
                 if (parsed_json["audio"].contains(id)) {
-                    float normalized_value = parsed_json["audio"][id].get<float>();
+                    int index = parsed_json["audio"][id].get<int>();
+                    float normalized_value =
+                        pair.second->getNormalisableRange().convertTo0to1(static_cast<float>(index));
                     pair.second->setValueNotifyingHost(normalized_value);
                 }
             }
