@@ -150,10 +150,14 @@ struct AudioParameterList {
 };
 
 /// UI parameter list
+//
+// TODO: consider using: std::map<std::string, std::atomic<float>>;
+// see note: [1.0]
 using UiParameterList = std::map<std::string, std::atomic<float>>;
 
 /// Sensor parameter list
-using SensorParameterList = std::map<std::string, std::atomic<float>>;
+//
+// TODO: consider using: std::map<std::string, std::atomic<float>>;using SensorParameterList = std::map<std::string, std::atomic<float>>;
 
 /// Host parameter list
 using HostParameterList = std::vector<HostParameterSpec>;
@@ -297,3 +301,17 @@ class ParameterAttachments {
 };
 
 }
+
+/* Notes
+
+ # 1.0. usage of std:map with atomic
+
+ std::atomic is neither copyable nor movable. While your use of emplace() and
+std::piecewise_construct in the .cpp file correctly constructs these in-place without
+triggering copies, you must be careful never to pass these maps by value or use STL algorithms
+that require copying/moving elements.
+
+ • Verdict: It is safe as currently written, but if you ever refactor this, consider using
+   std::map<std::string, std::unique_ptr<std::atomic<float>>> or a custom thread-safe wrapper
+   to avoid accidental compilation errors later.
+*/

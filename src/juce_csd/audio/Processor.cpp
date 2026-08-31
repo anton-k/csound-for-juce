@@ -102,6 +102,7 @@ void Processor::read_midi_from_host(juce::MidiBuffer& host_midi_messages) {
 }
 
 void Processor::write_midi_to_host(juce::MidiBuffer& host_midi_messages, int block_start_sample, int block_size) {
+    if (block_size <= 0) return;
     if (csound.get_io_layout().has_midi_out) {
         host_midi_messages.clear();
         csd_plugin::RawMidiEvent csd_midi_event;
