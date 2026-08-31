@@ -23,8 +23,7 @@ struct CsoundSettings {
 };
 
 /// Layout of the IO-busses. How many inputs/outputs. Does it have MIDI or side-chain.
-class IOLayout {
-  public:
+struct IOLayout {
     IOLayout() {};
     IOLayout(const IOLayout& that) {
       sidechain_size = that.sidechain_size;
@@ -47,7 +46,7 @@ class IOLayout {
       return out_size;
     }
 
-    static IOLayout synt_layout() {
+    static IOLayout synt() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = true;
@@ -57,7 +56,7 @@ class IOLayout {
       return layout;
     };
 
-    static IOLayout synt_mono_layout() {
+    static IOLayout synt_mono() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = true;
@@ -67,7 +66,7 @@ class IOLayout {
       return layout;
     };
 
-    static IOLayout fx_layout() {
+    static IOLayout fx() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = false;
@@ -77,7 +76,7 @@ class IOLayout {
       return layout;
     };
 
-    static IOLayout fx_mono_layout() {
+    static IOLayout fx_mono() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = false;

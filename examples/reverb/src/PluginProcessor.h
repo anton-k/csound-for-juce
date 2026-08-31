@@ -11,7 +11,7 @@
 class AudioPluginAudioProcessor final : public juce_csd::PluginProcessor
 {
 public:
-    AudioPluginAudioProcessor(): juce_csd::PluginProcessor(EmbeddedCsd::getReverbCsd(), csd_plugin::IOLayout::fx_layout(), init_parameter_spec()){};
+    AudioPluginAudioProcessor(): juce_csd::PluginProcessor(EmbeddedCsd::getReverbCsd(), csd_plugin::IOLayout::fx(), init_parameter_spec()){};
     ~AudioPluginAudioProcessor() override {};
 
     juce::AudioProcessorEditor* createEditor() override;
