@@ -158,6 +158,7 @@ using UiParameterList = std::map<std::string, std::atomic<float>>;
 /// Sensor parameter list
 //
 // TODO: consider using: std::map<std::string, std::atomic<float>>;using SensorParameterList = std::map<std::string, std::atomic<float>>;
+using SensorParameterList = std::map<std::string, std::atomic<float>>;
 
 /// Host parameter list
 using HostParameterList = std::vector<HostParameterSpec>;
