@@ -108,6 +108,11 @@ glitches, or corrupt user projects.
  • Action: In prepareToPlay, use csound->GetChannelPtr() to cache raw MYFLT* pointers for all
    parameters. In processBlock, write directly to those memory addresses.
 
+   Done: for audio parameters
+   Do the same for:
+    - sensors
+    - host parameters
+
 2. Csound Message & Error Routing
 
  • Why: By default, Csound prints warnings, errors, and printks opcodes to stdout/stderr. In

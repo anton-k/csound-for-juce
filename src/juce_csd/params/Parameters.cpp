@@ -252,14 +252,18 @@ void Parameters::update_cached_audio_params(Csound* csound, int block_size) {
 
     // Only call Csound API if value has changed
     if (should_send) {
-        if (cached.channel_ptr != nullptr) {
-          *static_cast<MYFLT*>(cached.channel_ptr) = static_cast<MYFLT>(value_to_send);
-        } else {
-          csound->SetControlChannel(cached.id.c_str(), value_to_send);
-        }
-        cached.update_value(value_to_send);
+      cached.set_value(csound, value_to_send);
     }
   }
+}
+
+void CachedParam::set_value(Csound* csound, double value_to_send) {
+    if (channel_ptr != nullptr) {
+      *static_cast<MYFLT*>(channel_ptr) = static_cast<MYFLT>(value_to_send);
+    } else {
+      csound->SetControlChannel(id.c_str(), value_to_send);
+    }
+    update_value(value_to_send);
 }
 
 void Parameters::update_float_audio_params(Csound* csound, int block_size) {

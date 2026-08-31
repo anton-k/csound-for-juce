@@ -205,6 +205,8 @@ struct CachedParam {
         return std::abs(new_value - previous_value) > epsilon;
     }
 
+    void set_value(Csound* csound, double new_value);
+
     void update_value(double new_value) {
         previous_value = new_value;
         has_been_initialized = true;
