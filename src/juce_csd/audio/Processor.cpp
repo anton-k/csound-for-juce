@@ -16,8 +16,8 @@ Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLa
 
 void Processor::prepareToPlay (double sample_rate, int max_block_size)
 {
-    parameters.prepare(sample_rate, max_block_size);
     csound.prepare_to_play(static_cast<int>(std::round(sample_rate)),  max_block_size);
+    parameters.prepare(csound.get_csound(), sample_rate, max_block_size);
 }
 
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)

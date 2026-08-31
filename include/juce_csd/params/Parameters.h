@@ -187,7 +187,15 @@ using ParameterPtr = std::variant<
 // has not changed
 struct CachedParam {
     std::string id;
+    void* channel_ptr;
     ParameterPtr param_ptr;
+
+    CachedParam(Csound* csound, const std::string& id_, ParameterPtr param_ptr_): id(id_), param_ptr(param_ptr_) {
+        int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL);
+        if (status != 0) {
+          channel_ptr = nullptr;
+        }
+    }
 
     double previous_value{0.0};
     bool has_been_initialized{false};
@@ -209,7 +217,7 @@ class Parameters {
     Parameters(juce:: AudioProcessor&, const ParameterSpec&);
 
     /// Method is called on prepareToPlay phase of the plugin
-    void prepare(double sample_rate, int max_block_size);
+    void prepare(Csound* csound, double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
     void update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head);
