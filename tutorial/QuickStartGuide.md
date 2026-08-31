@@ -560,3 +560,231 @@ Our plugin does not use sensor and host parameters and by default they are set t
 The parameters tell to the cpp audio processing code which parameters the underlying Csound code supports.
 The audio parameters are inputs for Csound (the UI sets those parameters to Csound),
 and sensors are outputs which we read from Csound to UI.
+
+This completes the definition of the audio processing for our plugin.
+Let's define the UI part of it.
+
+## UI for the plugin
+
+The UI code we define in the class `PluginEditor`. It's our custom UI
+that we will define with the JUCE components. It's not an intro to the
+UI for JUCE. But I'll discuss briefly the main concepts.
+
+In the JUCe we define widgets in the editor constructor, we palce them
+to the window and attach UI controls to the parameters that control the plugin.
+The placement of the widgets is defined in the `resized` method.
+Let's look at the definition of the editor class:
+
+```cpp
+#pragma once
+
+#include "PluginProcessor.h"
+#include "juce_audio_processors/juce_audio_processors.h"
+#include "juce_gui_basics/juce_gui_basics.h"
+#include <memory>
+#include <juce_csd/params/Parameters.h>
+
+using namespace juce_csd;
+
+//==============================================================================
+class AudioPluginAudioProcessorEditor final : public juce::AudioProcessorEditor
+{
+public:
+    explicit AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor&);
+    ~AudioPluginAudioProcessorEditor() override;
+
+    //==============================================================================
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+
+private:
+    AudioPluginAudioProcessor& processorRef;
+    juce::Slider size_knob, tone_knob, mix_knob;
+    juce::ComboBox reverb_type_selector;
+    juce::Label size_label, tone_label, mix_label;
+    juce::Font font;
+    juce_csd::ParameterAttachments parameter_attachments;
+    std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
+};
+```
+In the list of the members we keep the reference to audio processor `processorRef` to
+get the current values of the parameters. We have several widgets for knobs and combo box (drop-down list in JUCE).
+Also we define widgets for knob labels.
+
+An interesting member is `parameter_attachment`:
+
+```cpp
+  juce_csd::ParameterAttachments parameter_attachments;
+
+```
+
+It's used to link UI controlls with Csound parameters. It allows to register
+listeners for changes in the UI and forward those changes to the Csound.
+We can register attachments in the constructor:
+
+
+```cpp
+    /// Setup parameter attachments. It links UI-control to the update of Csound parameters
+    parameter_attachments.add_slider(names::size, size_knob);
+    parameter_attachments.add_slider(names::tone, tone_knob);
+    parameter_attachments.add_slider(names::mix, mix_knob);
+    parameter_attachments.add_combo_box(names::reverb_type, reverb_type_selector);
+```
+
+Note that parameter id should be the same as in Csound code. To avoid mistakes
+we use not the strings literals but constants which are defined in the `const.h` file.
+
+
+Let's look at the constructor of the editor:
+
+```cpp
+//==============================================================================
+AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& processor)
+    : AudioProcessorEditor (&processor),
+    processorRef (processor),
+    font(juce::FontOptions(24.0)),
+    parameter_attachments(processor.get_parameters()),
+    constrainer(new juce::ComponentBoundsConstrainer())
+{
+    // Inits knobs to control float audio parameters
+    for (auto* knob : {&size_knob, &tone_knob, &mix_knob}) {
+        knob->setSliderStyle(juce::Slider::Rotary);
+        knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+        knob->setPopupDisplayEnabled(true, true, this);
+        knob->setRange(0.0, 1.0, 0.01);
+
+        addAndMakeVisible(knob);
+    }
+
+    // Choice parameter definition. Note that parameter index is 1-based. Because 0 is
+    // reserved in the JUCE for "no selection".
+    reverb_type_selector.addItem("Sean Costello", 1);
+    reverb_type_selector.addItem("Freeverb", 2);
+    reverb_type_selector.addItem("Nverb", 3);
+    addAndMakeVisible(reverb_type_selector);
+
+    /// Labels for the knobs
+    size_label.setText(names::size, juce::NotificationType::dontSendNotification);
+    tone_label.setText(names::tone, juce::NotificationType::dontSendNotification);
+    mix_label.setText(names::mix, juce::NotificationType::dontSendNotification);
+    for (auto* label : {&size_label, &tone_label, &mix_label}) {
+        label->setJustificationType(juce::Justification::horizontallyCentred);
+        label->setFont(font);
+        addAndMakeVisible(label);
+    }
+
+    /// Setup height and width fir the UI window (those params are persisted in the plugin state)
+    int window_height = static_cast<int>(processorRef.get_parameters().get_ui_parameter(names::window_height).value_or(250.0));
+    int window_width = static_cast<int>(processorRef.get_parameters().get_ui_parameter(names::window_width).value_or(400.0));
+    setSize (window_width, window_height);
+    setResizable(true, true);
+
+    /// Setup constrainer to keep fixed ratio of the window width and height
+    constrainer->setFixedAspectRatio(static_cast<float>(window_width) / static_cast<float>(window_height));
+    constrainer->setMinimumHeight(100);
+    constrainer->setMinimumWidth(200);
+    setConstrainer(constrainer.get());
+
+    /// Setup parameter attachments. It links UI-control to the update of Csound parameters
+    parameter_attachments.add_slider(names::size, size_knob);
+    parameter_attachments.add_slider(names::tone, tone_knob);
+    parameter_attachments.add_slider(names::mix, mix_knob);
+    parameter_attachments.add_combo_box(names::reverb_type, reverb_type_selector);
+}
+```
+
+We define knobs for float parameters, drop-down list (1-based index) and labels
+for the knobs. Also we define constrainer to keep ratio of the window sizes fixed
+and also it defines minimum sizes for the window. This is all normal JUCE UI code.
+Note the improtance of `addAndMakeVisisble`. Without it the widget is not going to be
+placedon the surface of the window. Also note on how we register the parameter attachments
+and how attachments are initialized.
+
+We have initialized the plugins to make them layout in the proper places
+we define the rectangle bounds for the elements of the UI in the resized method.
+It's an ordinary JUCE code:
+
+```cpp
+/// Defines layout of the plugin UI
+void AudioPluginAudioProcessorEditor::resized()
+{
+    juce::Rectangle<int> local_bounds = getLocalBounds();
+    int local_width = local_bounds.getWidth();
+    int local_height = local_bounds.getHeight();
+
+    int pad_x = scale_int(30.0 / values::window_width, local_width);
+    int pad_y = scale_int(30.0 / values::window_height, local_height);
+    int knob_width = scale_int(100.0 / values::window_width, local_width);
+    int knob_height = scale_int(100.0/ values::window_height, local_height);
+    int pad_knob = scale_int(20.0 / values::window_width, local_width);
+
+    int second_knob_x = pad_x + knob_width + pad_knob;
+    int third_knob_x = second_knob_x + knob_width + pad_knob;
+    int label_y = scale_int(140.0 / values::window_height, local_height);
+    int selector_x = scale_int(0.15, local_width) + second_knob_x;
+    int selector_y = scale_int(195.0 / values::window_height, local_height);
+    int selector_height = scale_int(30.0 / values::window_width, local_width);
+    int selector_width = scale_int(0.75, knob_width * 2 + pad_x);
+
+    size_knob.setBounds({ pad_x, pad_y, knob_width, knob_height });
+    tone_knob.setBounds({ second_knob_x, pad_y, knob_width, knob_height });
+    mix_knob.setBounds({ third_knob_x, pad_y, knob_width, knob_height });
+    size_label.setBounds({ pad_x, label_y, knob_width, pad_y });
+    tone_label.setBounds({ second_knob_x, label_y, knob_width, pad_y });
+    mix_label.setBounds({ third_knob_x, label_y, knob_width, pad_y });
+    processorRef.get_parameters().set_ui_parameter(names::window_width, local_width);
+    processorRef.get_parameters().set_ui_parameter(names::window_height, local_height);
+
+    reverb_type_selector.setBounds({selector_x, selector_y, selector_width, selector_height});
+}
+```
+
+We could also have used const module for UI constants but in this listing they are inlined for simplicity.
+That's it we have defined the full code for our plugin. You can see that it's mostly
+UI and Csound code.
+
+## Build the plugin
+
+We can build the project with commands (see also justfile for reverb example in the repo
+for up to date commands):
+
+Prepare build files. It will create the `build` directory with all the build files:
+
+```
+cmake -B build -G Ninja
+```
+
+Build the project:
+
+```
+cmake --build build
+```
+
+I use the justfile to automate this task:
+
+```
+  build:
+    cmake -B build -G Ninja
+    cmake --build build
+```
+
+also you can put here the code to launch standalone app for testing
+or copy the generated plugin to your global folder dedicated to plugins on your PC.
+
+And do:
+
+```
+  just build
+```
+
+Artefacts are generated inside the build directory:
+
+```
+build/src/ReverbCsdExample_artefacts/
+```
+
+That's it. We have defined our JUCE and Csound plugin. See the examples
+for more plugins and how to make them.

@@ -27,7 +27,7 @@ the audio loop and parameters, while you focus on sound design and your UI.
 
 Get started:
 
-* [`examples/`](https://github.com/anton-k/csound-for-juce/tree/main/examples)
+* [`examples/`](https://github.com/anton-k/csound-for-juce/tree/main/examples) - example plugins built with the library
 * [Quick start guide](https://github.com/anton-k/csound-for-juce/blob/main/tutorial/QuickStartGuide.md)
 * check out the repo [`reverb-csd-juce`](https://github.com/anton-k/reverb-csd-juce)
    for an example on how to use the library with Cmake in your own project.
