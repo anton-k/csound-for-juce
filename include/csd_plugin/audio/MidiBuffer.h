@@ -2,8 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <readerwriterqueue.h>
-using namespace moodycamel;
+#include <csd_plugin/audio/FastFifo.h>
 
 namespace csd_plugin {
 
@@ -46,12 +45,10 @@ class MidiBuffer {
     void pop();
 
     /// Reads the event from the buffer. Peeks and pops it.
-    bool read(RawMidiEvent& outEvent) {
-      return midi_buffer.try_dequeue(outEvent);
-    };
+    bool read(RawMidiEvent& outEvent);
 
   private:
-    ReaderWriterQueue<RawMidiEvent> midi_buffer;
+    FastFifo<RawMidiEvent> midi_buffer;
 };
 
 /// Input and output midi buffers
