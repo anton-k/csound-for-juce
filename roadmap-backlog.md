@@ -136,6 +136,8 @@ Action: This is generally acceptable for v1.0, but for v1.1, you might want to a
 fallback mechanism to prevent infinite UI hangs during debugging.
 
 
+7. Implement non thread safe alternative for faster FIFO buffer for Audio and MIDI
+
 -----------------------------------------------------------------------------------------------
 
 🟢 P2: Deferred to v1.2+ (Advanced / Niche)
