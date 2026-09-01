@@ -9,8 +9,9 @@ using json = nlohmann::json;
 
 namespace juce_csd {
 
-void JsonSerializer::serialize(const AudioParameterList &audio_parameters, const UiParameterList& ui_parameters, juce::OutputStream &output) {
+void JsonSerializer::serialize(const ParameterSpecMap& spec, const AudioParameterList &audio_parameters, const UiParameterList& ui_parameters, juce::OutputStream &output) {
     json json_data;
+    json_data["version"] = spec.version;
     json_data["audio"] = json::object();
 
     // 1. Floats: Get actual value, then convert to normalized (0.0 - 1.0)
@@ -55,7 +56,7 @@ void JsonSerializer::serialize(const AudioParameterList &audio_parameters, const
     output.writeString(juce::String(json_string));
 }
 
-juce::Result JsonSerializer::deserialize(juce::InputStream &input, AudioParameterList &audio_parameters, UiParameterList& ui_parameters) {
+juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::InputStream &input, AudioParameterList &audio_parameters, UiParameterList& ui_parameters) {
     std::string raw_json = input.readEntireStreamAsString().toStdString();
     if (raw_json.empty()) {
         return juce::Result::fail("Empty state data");

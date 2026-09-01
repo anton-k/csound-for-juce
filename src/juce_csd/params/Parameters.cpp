@@ -18,6 +18,28 @@ bool float_equals(float a, float b, float epsilon = 1e-4f) {
 }
 }
 
+ParameterSpecMap::ParameterSpecMap(const ParameterSpec& spec): version(spec.version) {
+  for (auto& param: spec.audio_floats) {
+    audio_floats.emplace(param.id, param);
+  }
+
+  for (auto& param: spec.audio_bools) {
+    audio_bools.emplace(param.id, param);
+  }
+
+  for (auto& param: spec.audio_ints) {
+    audio_ints.emplace(param.id, param);
+  }
+
+  for (auto& param: spec.audio_choices) {
+    audio_choices.emplace(param.id, param);
+  }
+
+  for (auto& param: spec.ui) {
+    ui.emplace(param.id, param);
+  }
+}
+
 SmoothedParam::SmoothedParam(juce::AudioParameterFloat* p, ParameterType t, float default_val, float smooth_ms)
         : param(p), type(t), smoothing_time_ms(smooth_ms), current_value(default_val), target_value(default_val)
 {}
@@ -62,7 +84,7 @@ float SmoothedParam::process(int block_size) {
 }
 
 Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spec):
-    audio_parameters(), ui_parameters(), sensor_parameters() {
+    audio_parameters(), ui_parameters(), sensor_parameters(), parameter_spec_map(spec) {
     init_float_audio_parameters(processor, spec.audio_floats);
     init_bool_audio_parameters(processor, spec.audio_bools);
     init_choice_audio_parameters(processor, spec.audio_choices);
@@ -379,14 +401,14 @@ void Parameters::update_host_params(juce::AudioPlayHead* play_head) {
 
 void Parameters::getStateInformation (juce::MemoryBlock& destData)
 {
-    juce::MemoryOutputStream os{destData, true};
-    JsonSerializer::serialize(audio_parameters, ui_parameters, os);
+    juce::MemoryOutputStream ooutput_stream{destData, true};
+    JsonSerializer::serialize(parameter_spec_map, audio_parameters, ui_parameters, ooutput_stream);
 }
 
 void Parameters::setStateInformation (const void* data, int sizeInBytes)
 {
-    juce::MemoryInputStream is{data, static_cast<size_t>(sizeInBytes), false};
-    const juce::Result result = JsonSerializer::deserialize(is, audio_parameters, ui_parameters);
+    juce::MemoryInputStream input_stream{data, static_cast<size_t>(sizeInBytes), false};
+    const juce::Result result = JsonSerializer::deserialize(parameter_spec_map, input_stream, audio_parameters, ui_parameters);
     if (result.failed()) {
         DBG(result.getErrorMessage());
     }

@@ -13,8 +13,8 @@ namespace juce_csd {
  */
 class JsonSerializer {
   public:
-    static void serialize(const AudioParameterList&, const UiParameterList&, juce::OutputStream&);
-    static juce::Result deserialize(juce::InputStream&, AudioParameterList&, UiParameterList&);
+    static void serialize(const ParameterSpecMap& spec, const AudioParameterList&, const UiParameterList&, juce::OutputStream&);
+    static juce::Result deserialize(const ParameterSpecMap& spec, juce::InputStream&, AudioParameterList&, UiParameterList&);
 };
 
 }

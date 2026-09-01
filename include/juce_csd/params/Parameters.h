@@ -165,6 +165,7 @@ using HostParameterList = std::vector<HostParameterSpec>;
 
 /// Parameter specification. It lists all parameters for the application.
 struct ParameterSpec {
+  int version;
   std::vector<AudioParameterFloatSpec> audio_floats{}; ///< float audio parameters
   std::vector<AudioParameterBoolSpec> audio_bools{}; ///< boolean audio parameters
   std::vector<AudioParameterChoiceSpec> audio_choices{}; ///< choice audio parameters
@@ -172,6 +173,24 @@ struct ParameterSpec {
   std::vector<UiParameterSpec> ui{}; ///< UI parameters
   std::vector<SensorParameterSpec> sensor{}; ///< sensor parameters
   std::vector<HostParameterSpec> host{}; ///< parameters which are read from the host
+};
+
+using AudioParameterFloatSpecMap = std::map<std::string, AudioParameterFloatSpec>;
+using AudioParameterBoolSpecMap = std::map<std::string, AudioParameterBoolSpec>;
+using AudioParameterIntSpecMap = std::map<std::string, AudioParameterIntSpec>;
+using AudioParameterChoiceSpecMap = std::map<std::string, AudioParameterChoiceSpec>;
+using UiParameterSpecMap = std::map<std::string, UiParameterSpec>;
+
+/// Parameter specification as map for fast lookup of the default values.
+struct ParameterSpecMap {
+  ParameterSpecMap(const ParameterSpec& spec);
+
+  int version;
+  AudioParameterFloatSpecMap audio_floats{}; ///< float audio parameters
+  AudioParameterBoolSpecMap audio_bools{}; ///< boolean audio parameters
+  AudioParameterChoiceSpecMap audio_choices{}; ///< choice audio parameters
+  AudioParameterIntSpecMap audio_ints{}; ///< integer audio parameters
+  UiParameterSpecMap ui{}; ///< UI parameters
 };
 
 /// Parameter pointer
@@ -324,6 +343,7 @@ class Parameters {
     std::vector<AudioParam> cached_audio_parameters{};
     std::vector<HostParam> cached_host_parameters{};
     std::vector<SensorParam> sensor_parameter_ptrs{};
+    ParameterSpecMap parameter_spec_map;
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
