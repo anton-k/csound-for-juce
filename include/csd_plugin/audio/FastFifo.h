@@ -113,6 +113,7 @@ for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
 #include <vector>
 #include <cstring>
 #include <type_traits>
+#include <cstdint>
 
 namespace csd_plugin {
 
@@ -137,11 +138,13 @@ public:
         write_pos_ = 0;
     }
 
-    // --- Single Item Operations (Used for MIDI) ---
+    // --- Single Item Operations ---
 
-    void push(const T& item) {
+    bool push(const T& item) {
+        if (get_size() >= size_) return false; // Prevent overwrite
         buffer_[write_pos_ & mask_] = item;
         ++write_pos_;
+        return true;
     }
 
     bool read(T& dest) {
@@ -151,7 +154,6 @@ public:
         return true;
     }
 
-    // Peek without consuming (Crucial for MIDI timestamp checking)
     T* peek() {
         if (get_size() == 0) return nullptr;
         return &buffer_[read_pos_ & mask_];
@@ -161,11 +163,13 @@ public:
         if (get_size() > 0) ++read_pos_;
     }
 
-    // --- Block Operations (Used for Audio) ---
+    // --- Block Operations ---
 
-    void write_block(const T* data, int num_items) {
-        int write_idx = write_pos_ & mask_;
-        int space_until_end = size_ - write_idx;
+    bool write_block(const T* data, int num_items) {
+        if (get_size() + num_items > size_) return false; // Not enough space
+
+        uint32_t write_idx = write_pos_ & mask_;
+        uint32_t space_until_end = size_ - write_idx;
 
         if (space_until_end >= num_items) {
             std::memcpy(&buffer_[write_idx], data, num_items * sizeof(T));
@@ -174,11 +178,14 @@ public:
             std::memcpy(&buffer_[0], data + space_until_end, (num_items - space_until_end) * sizeof(T));
         }
         write_pos_ += num_items;
+        return true;
     }
 
-    void read_block(T* dest, int num_items) {
-        int read_idx = read_pos_ & mask_;
-        int space_until_end = size_ - read_idx;
+    bool read_block(T* dest, int num_items) {
+        if (get_size() < num_items) return false; // Not enough data
+
+        uint32_t read_idx = read_pos_ & mask_;
+        uint32_t space_until_end = size_ - read_idx;
 
         if (space_until_end >= num_items) {
             std::memcpy(dest, &buffer_[read_idx], num_items * sizeof(T));
@@ -187,20 +194,22 @@ public:
             std::memcpy(dest + space_until_end, &buffer_[0], (num_items - space_until_end) * sizeof(T));
         }
         read_pos_ += num_items;
+        return true;
     }
 
     // --- State ---
 
-    int get_size() const { return write_pos_ - read_pos_; }
+    int get_size() const { return static_cast<int>(write_pos_ - read_pos_); }
     int get_capacity() const { return size_; }
     void clear() { read_pos_ = write_pos_ = 0; }
 
 private:
     std::vector<T> buffer_;
     int size_ = 0;
-    int mask_ = 0;
-    int read_pos_ = 0;
-    int write_pos_ = 0;
+    uint32_t mask_ = 0;
+    uint32_t read_pos_ = 0;
+    uint32_t write_pos_ = 0;
 };
 
 } // namespace csd_plugin
+
