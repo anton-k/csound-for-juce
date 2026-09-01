@@ -91,3 +91,7 @@ target_link_libraries(fifo_tests PRIVATE juce_csd Catch2::Catch2WithMain)
 # Standard CTest integration (built into CMake, no Catch2 modules needed)
 add_test(NAME FastFifoTests COMMAND fifo_tests)
 
+add_executable(param_tests tests/test_smoothing.cpp tests/test_serialization.cpp)
+target_link_libraries(param_tests PRIVATE juce_csd Catch2::Catch2WithMain)
+add_test(NAME ParameterTests COMMAND param_tests)
+
