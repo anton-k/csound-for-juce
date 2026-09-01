@@ -57,12 +57,6 @@ architectural improvements are needed:
 
 4. Real-Time (RT) Safety & DSP Robustness
 
- • String Lookups in the Audio Thread: update_cached_audio_params calls
-   csound->SetControlChannel(cached.id.c_str(), ...). While .c_str() doesn't
-   allocate, Csound's internal channel lookup uses a hash map. In Csound 6, this
-   can occasionally cause micro-stutters. For absolute RT safety, consider using
-   Csound's channel pointers (csound->GetChannelPtr()) during prepareToPlay and
-   writing directly to the memory addresses in the audio thread.
  • SysEx and Large MIDI: Capping MIDI at 4 bytes is great for RT safety, but it
    silently drops SysEx and large NRPN messages. A production synth might need a
    secondary, non-RT queue for SysEx handling (e.g., for preset dumps).
@@ -97,17 +91,6 @@ Here is the prioritized roadmap for the library.
 If these are missing, the plugin will fail in professional DAW environments, cause audio
 glitches, or corrupt user projects.
 
-1. Real-Time (RT) Safety for Parameters (Channel Pointers)
-
- • Why: Calling csound->SetControlChannel(name, value) on the audio thread requires Csound to
-   do a string hash-map lookup. In Csound 6, this is not RT-safe and will cause audio dropouts.
- • Action: In prepareToPlay, use csound->GetChannelPtr() to cache raw MYFLT* pointers for all
-   parameters. In processBlock, write directly to those memory addresses.
-
-   Done: for audio parameters
-   Do the same for:
-    - sensors
-    - host parameters
 
 2. Csound Message & Error Routing
 
@@ -457,14 +440,9 @@ Easy (1-2 Days):
 
  • Message Routing: Add csound->SetMessageCallback() to stop Csound from printing
    to the DAW's console.
- • State Versioning: Add a "version": 1 integer to your JSON serializer.
 
 Moderate (3-5 Days):
 
- • RT-Safety (Channel Pointers): As discussed previously, replace
-   SetControlChannel(string, value) with cached MYFLT* pointers using
-   GetChannelPtr(). This requires modifying your CachedParam struct to hold a raw
-   pointer, but it guarantees zero audio dropouts.
  • K-Rate Smoothing Hook: Implement the std::function<void()> callback in the
    Csound loop so parameters update at the ksmps rate rather than the block rate.
 
@@ -475,16 +453,20 @@ Hard / Optional (Defer to v2.0):
    tweaking parameters while Csound is booting. Advice: For v1.0, just keep it
    synchronous but document that massive CSD files might cause a 1-second UI
    freeze on load. DAWs tolerate this.
+ • JSON migrations, how to migrate JSONs between versions (maybe it's unnecessary
+   if we migrate to APVTS, see the next point, research on APVTS, does it support migrations and versioning)
  • APVTS Migration: Migrating your custom ParameterSpec to JUCE's
    AudioProcessorValueTreeState is a massive refactor. Advice: Don't do it for
    v1.0. Your current system works, it serializes well, and it maps perfectly to
    Csound strings. Keep it.
 
+
+
 Summary Strategy
 
 Do not let "feature creep" stop you from releasing.
 
- 1 Implement the RT-Safety Channel Pointers and Message Callbacks.
+ 1 Implement the Message Callbacks.
  2 Write a solid README.md with a copy-paste CMake template (like you have in your
    QuickStart guide).
  3 Release v1.0.
