@@ -22,6 +22,7 @@ void Processor::prepareToPlay (double sample_rate, int max_block_size)
 
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)
 {
+    const juce::ScopedNoDenormals noDenormals;
     if (!csound.is_ready_to_play()) {
         // Safety: If not ready, clear the buffer to prevent passing garbage/previous data to the host
         buffer.clear();
