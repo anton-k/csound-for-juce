@@ -6,8 +6,6 @@ routing. However, to be considered complete and production-ready for commercial
 or widely distributed plugin development, several critical features and
 architectural improvements are needed:
 
-
-
 ## Backlog with priorities
 
 
@@ -126,13 +124,3 @@ release.
  • Why: CLAP is still gaining traction, and Note Expressions are an advanced feature. SysEx is
    rarely used in modern DSP plugins outside of hardware emulation.
  • Action: Defer. Standard VST3/AU/CLAP parameter automation is enough for v1.0.
-
------------------------------------------------------------------------------------------------
-
-Summary Strategy for v1.0
-
-To get to v1.0 quickly and safely:
-
- 4 Release v1.0.
-
-Once v1.0 is stable in the wild, tackle the APVTS refactor and Async compilation for v1.1.
