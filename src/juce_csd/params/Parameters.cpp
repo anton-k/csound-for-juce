@@ -213,6 +213,11 @@ void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_r
 
 // TODO: implement me
 void Parameters::prepare_cached_host_parameters(Csound* csound) {
+  cached_host_parameters.reserve(host_parameters.size());
+  cached_host_parameters.clear();
+  for (auto& param: host_parameters) {
+    cached_host_parameters.push_back(HostParam(csound, param));
+  }
 }
 
 void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
@@ -305,9 +310,9 @@ void Parameters::update_sensor_params(Csound* csound) {
 }
 
 namespace {
-  void set_optional_csound_param(Csound* csound, const std::string& name, const juce::Optional<double>& value) {
+  void set_optional_csound_param(Csound* csound, CachedParam& param, const juce::Optional<double>& value) {
      if (value.hasValue()) {
-       csound->SetControlChannel(name.c_str(), *value);
+       param.set_value(csound, *value);
      }
   }
 }
@@ -319,27 +324,27 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
   if (!pos_info.hasValue()) return;
   auto pos = pos_info;
 
-   for (auto& param: host_parameters) {
+   for (auto& param: cached_host_parameters) {
      switch (param.parameter_type) {
        case (HostParameterType::Bpm): {
-         set_optional_csound_param(csound, param.id, pos->getBpm());
+         set_optional_csound_param(csound, param.cached, pos->getBpm());
          break;
        }
 
        case (HostParameterType::TimeInSamples): {
-         set_optional_csound_param(csound, param.id, pos->getTimeInSamples());
+         set_optional_csound_param(csound, param.cached, pos->getTimeInSamples());
          break;
        }
 
        case (HostParameterType::TimeInSeconds): {
-         set_optional_csound_param(csound, param.id, pos->getTimeInSeconds());
+         set_optional_csound_param(csound, param.cached, pos->getTimeInSeconds());
          break;
        }
 
        case (HostParameterType::TimeSigNumerator): {
           auto opt_signature = pos->getTimeSignature();
           if (opt_signature.hasValue()) {
-            csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->numerator));
+            param.cached.set_value(csound, static_cast<double>(opt_signature->numerator));
           }
           break;
        }
@@ -347,45 +352,45 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
        case (HostParameterType::TimeSigDenominator): {
           auto opt_signature = pos->getTimeSignature();
           if (opt_signature.hasValue()) {
-            csound->SetControlChannel(param.id.c_str(), static_cast<double>(opt_signature->denominator));
+            param.cached.set_value(csound, static_cast<double>(opt_signature->denominator));
           }
           break;
        }
 
        case (HostParameterType::IsPlaying): {
-         csound->SetControlChannel(param.id.c_str(), pos->getIsPlaying() ? 1.0 : 0.0);
+         param.cached.set_value(csound, pos->getIsPlaying() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::IsRecording): {
-         csound->SetControlChannel(param.id.c_str(), pos->getIsRecording() ? 1.0 : 0.0);
+         param.cached.set_value(csound, pos->getIsRecording() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::IsLooping): {
-         csound->SetControlChannel(param.id.c_str(), pos->getIsLooping() ? 1.0 : 0.0);
+         param.cached.set_value(csound, pos->getIsLooping() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::QuarterNotesPosition): {
-         set_optional_csound_param(csound, param.id, pos->getPpqPosition());
+         set_optional_csound_param(csound, param.cached, pos->getPpqPosition());
          break;
        }
 
        case (HostParameterType::QuarterNotesPositionOfLastBarStart): {
-         set_optional_csound_param(csound, param.id, pos->getPpqPositionOfLastBarStart());
+         set_optional_csound_param(csound, param.cached, pos->getPpqPositionOfLastBarStart());
          break;
        }
 
        case (HostParameterType::BarCount): {
-         set_optional_csound_param(csound, param.id, pos->getBarCount());
+         set_optional_csound_param(csound, param.cached, pos->getBarCount());
          break;
        }
 
        case (HostParameterType::FrameRate): {
          auto rate = pos->getFrameRate();
          if (rate.hasValue()) {
-           csound->SetControlChannel(param.id.c_str(), rate->getBaseRate());
+           param.cached.set_value(csound, rate->getBaseRate());
          }
          break;
        }
