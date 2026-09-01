@@ -61,11 +61,11 @@ void CsoundSettings::set_channel_names(Csound* csound) {
 }
 
 int Processor::get_latency_samples() {
-    if (io_layout.get_total_in_size() > 0) {
-        return csound_settings.ksmps;
-    } else {
-        return 0;
-    }
+    int csound_processing_latency =
+        (io_layout.get_total_in_size() > 0)
+            ? csound_settings.ksmps + io_layout.extra_latency_samples
+            : 0;
+    return io_layout.extra_latency_samples + csound_processing_latency;
 }
 
 void Processor::write_input(double sample) {

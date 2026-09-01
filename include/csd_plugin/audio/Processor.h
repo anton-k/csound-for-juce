@@ -32,6 +32,7 @@ struct IOLayout {
       has_midi_out = that.has_midi_out;
       in_size = that.in_size;
       out_size = that.out_size;
+      extra_latency_samples = that.extra_latency_samples;
     }
 
     bool has_midi_in {false}; ///< Has MIDI input
@@ -97,6 +98,7 @@ struct IOLayout {
     int in_size {2}; ///< how many inputs (stereo is 2)
     int out_size {2}; ///< how many outputs (stereo is 2)
     int sidechain_size {0}; ///< size of the side-chain  inputs
+    int extra_latency_samples{0}; ///< constant extra latency in samples of the plugin
 };
 
 /// Defines audio processing with Csound
