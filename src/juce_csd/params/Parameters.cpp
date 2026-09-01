@@ -125,8 +125,6 @@ juce::AudioParameterInt& Parameters::get_int_audio_parameter_ref(const std::stri
     throw std::runtime_error("Int parameter not found: " + id);
 }
 
-
-
 void Parameters::init_float_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterFloatSpec>& param_specs) {
     for (const auto& spec : param_specs) {
         DBG("Creating float parameter: " << spec.name);
@@ -200,37 +198,44 @@ void Parameters::prepare(Csound* csound, double sample_rate, int max_block_size)
   prepare_cached_audio_parameters(csound, sample_rate, max_block_size);
   prepare_cached_host_parameters(csound);
   prepare_sensor_parameters(csound);
+  prepare_krate_counter(csound, sample_rate);
+}
+
+void Parameters::prepare_krate_counter(Csound* csound, double sample_rate) {
+  int ksmps = csound->GetKsmps();
+  int current_krate = static_cast<int>(sample_rate) / std::max(1, ksmps);
+  krate_divider = std::max(1, current_krate / PARAMETER_SMOOTH_RATE);
+  krate_counter = 0;
 }
 
 // TODO: do not put in cache paraeters with nullptr as prameter.ptr
 void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size) {
-    cached_audio_parameters.reserve(
-        audio_parameters.floats.size() +
-        audio_parameters.bools.size() +
-        audio_parameters.choices.size() +
-        audio_parameters.ints.size()
-    );
-    cached_audio_parameters.clear();
+    cached_smoothed_audio_parameters.clear();
+    cached_discrete_audio_parameters.clear();
 
     // Cache float parameters
     for (auto& [id, param] : audio_parameters.floats) {
         param.set_sample_rate(static_cast<float>(sample_rate));
-        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(&param)});
+        if (param.type == ParameterType::Continuous) {
+          cached_smoothed_audio_parameters.push_back(SmoothedAudioParam(csound, id, &param));
+        } else {
+          cached_discrete_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(&param)});
+        }
     }
 
     // Cache bool parameters
     for (auto& [id, param] : audio_parameters.bools) {
-        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
+        cached_discrete_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 
     // Cache int parameters
     for (auto& [id, param] : audio_parameters.ints) {
-        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
+        cached_discrete_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 
     // Cache choice parameters
     for (auto& [id, param] : audio_parameters.choices) {
-        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
+        cached_discrete_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 }
 
@@ -250,24 +255,38 @@ void Parameters::prepare_sensor_parameters(Csound* csound) {
   }
 }
 
-void Parameters::update_on_process(int block_size, juce::AudioPlayHead* play_head) {
-  update_audio_params(block_size);
+void Parameters::update_on_process(juce::AudioPlayHead* play_head) {
+  update_audio_params();
   update_sensor_params();
   update_host_params(play_head);
 }
 
-void Parameters::update_audio_params(int block_size) {
-  for (auto& audio_parameter : cached_audio_parameters) {
+void Parameters::update_audio_params() {
+  update_smoothed_audio_params();
+  update_discrete_audio_params();
+}
+
+void Parameters::update_smoothed_audio_params() {
+    // 1. Fetch new targets for smoothed parameters (Block-Rate)
+    for (auto& smooth_param : cached_smoothed_audio_parameters) {
+        if (smooth_param.param && smooth_param.param->param) {
+            float new_target = smooth_param.param->param->get();
+            smooth_param.param->set_target(new_target);
+        }
+    }
+}
+
+void Parameters::update_discrete_audio_params() {
+  for (auto& audio_parameter : cached_discrete_audio_parameters) {
     std::visit([&](auto* param) {
       using ParamType = std::remove_pointer_t<decltype(param)>;
 
       if (param != nullptr) {
         if constexpr (std::is_same_v<ParamType, SmoothedParam>) {
-          // Float parameter with smoothing
+          // Discrete float parameter (No smoothing)
           if (param->param != nullptr) {
-              float new_target = param->param->get();
-              param->set_target(new_target);
-              audio_parameter.cached.set_value(param->process(block_size));
+              float new_value = param->param->get();
+              audio_parameter.cached.set_value(static_cast<double>(new_value));
           }
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterBool>) {
@@ -286,6 +305,7 @@ void Parameters::update_audio_params(int block_size) {
     }, audio_parameter.ptr);
   }
 }
+
 
 void CachedInputParam::set_value(double value_to_send) {
     if (has_changed(value_to_send)) {
@@ -397,6 +417,24 @@ void Parameters::update_host_params(juce::AudioPlayHead* play_head) {
        }
      }
    }
+}
+
+void Parameters::update_krate_params(int ksmps) {
+    // 1. Cycle Skipping Logic
+    krate_counter++;
+    if (krate_counter < krate_divider) {
+        return; // Skip this Csound cycle
+    }
+    krate_counter = 0;
+    int step_size = ksmps * krate_divider;
+
+    for (auto& smooth_param : cached_smoothed_audio_parameters) {
+        // Only do the math if the parameter is actively ramping
+        if (smooth_param.param->samples_remaining > 0) {
+            float value_to_send = smooth_param.param->process(step_size);
+            smooth_param.cached.set_value(static_cast<double>(value_to_send));
+        }
+    }
 }
 
 void Parameters::getStateInformation (juce::MemoryBlock& destData)

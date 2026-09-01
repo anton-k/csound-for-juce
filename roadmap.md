@@ -91,6 +91,7 @@ Here is the prioritized roadmap for the library.
 If these are missing, the plugin will fail in professional DAW environments, cause audio
 glitches, or corrupt user projects.
 
+1. Parameter smoothing on ksmps boundaries (see the details for implementation below)
 
 2. Csound Message & Error Routing
 
@@ -101,15 +102,7 @@ glitches, or corrupt user projects.
    juce::Logger or a thread-safe queue that the UI can read. Never let Csound write directly to
    standard output.
 
-3. State Versioning
-
- • Why: If you release v1.0 without a version number in your JSON state, adding or removing a
-   parameter in v1.1 will break backward compatibility, corrupting users' saved DAW projects.
- • Action: Add a "version": 1 integer to the root of the JSON in JsonSerializer. In
-   deserialize, check this version and apply migration logic if loading an older state.
-
-
-4. Smooth Bypass / DSP Fallback
+3. Smooth Bypass / DSP Fallback
 
  • Why: If the host bypasses the plugin, or the user clicks a bypass button, abruptly stopping
    Csound processing or passing uninitialized buffers will cause loud clicks/pops.
@@ -155,6 +148,8 @@ functional v1.0 release.
  • Action: Refactor Parameters to wrap or utilize juce::AudioProcessorValueTreeState. (Keep
    this in v1.1 as it requires a significant refactor of your current working system).
 
+5. JSON declarative migration: do we need it if we will migrate to APVTS?
+
 -----------------------------------------------------------------------------------------------
 
 🟢 P2: Deferred to v1.2+ (Advanced / Niche)
@@ -193,8 +188,6 @@ Summary Strategy for v1.0
 
 To get to v1.0 quickly and safely:
 
- 1 Fix the RT-safety parameter lookups (use GetChannelPtr).
- 3 Add a "version" tag to your JSON state.
  4 Release v1.0.
 
 Once v1.0 is stable in the wild, tackle the APVTS refactor and Async compilation for v1.1.

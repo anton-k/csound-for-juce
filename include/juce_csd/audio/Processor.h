@@ -50,7 +50,7 @@ class Processor {
     void write_midi_to_host(juce::MidiBuffer&, int, int);
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
-    void update_parameters(int block_size, juce::AudioPlayHead*);
+    void update_parameters(juce::AudioPlayHead*);
 
     csd_plugin::Processor csound;
     Parameters parameters;

@@ -15,6 +15,8 @@
 
 namespace juce_csd {
 
+static const int PARAMETER_SMOOTH_RATE = 1500;
+
 /**
  * @brief Defines weather we should smooth parameter changes.
  */
@@ -270,6 +272,14 @@ struct AudioParam {
     ptr(param_ptr_), cached(csound, id) {};
 };
 
+struct SmoothedAudioParam {
+  SmoothedParam* param;
+  CachedInputParam cached;
+
+  SmoothedAudioParam(Csound* csound, const std::string& id, SmoothedParam* param_):
+    param(param_), cached(csound, id) {}
+};
+
 struct HostParam {
   HostParameterType parameter_type;
   CachedInputParam cached;
@@ -302,7 +312,7 @@ class Parameters {
     void prepare(Csound* csound, double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
-    void update_on_process(int block_size, juce::AudioPlayHead* play_head);
+    void update_on_process(juce::AudioPlayHead* play_head);
 
     /// Serializes the parameters to JSON. Only audio and UI parameters are persisted
     void getStateInformation (juce::MemoryBlock& destData);
@@ -336,6 +346,7 @@ class Parameters {
     void prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size);
     void prepare_cached_host_parameters(Csound* csound);
     void prepare_sensor_parameters(Csound* csound);
+    void prepare_krate_counter(Csound* csound, double sample_rate);
 
     void init_float_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterFloatSpec>&);
     void init_bool_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterBoolSpec>&);
@@ -345,19 +356,26 @@ class Parameters {
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
-    void update_audio_params(int block_size);
+    void update_audio_params();
+    void update_smoothed_audio_params();
+    void update_discrete_audio_params();
     void update_sensor_params();
     void update_host_params(juce::AudioPlayHead* play_head);
+    void update_krate_params(int ksmps);
 
     AudioParameterList audio_parameters;
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
     HostParameterList host_parameters;
 
-    std::vector<AudioParam> cached_audio_parameters{};
+    std::vector<AudioParam> cached_discrete_audio_parameters{};
+    std::vector<SmoothedAudioParam> cached_smoothed_audio_parameters{};
     std::vector<HostParam> cached_host_parameters{};
     std::vector<SensorParam> sensor_parameter_ptrs{};
     ParameterSpecMap parameter_spec_map;
+    std::vector<AudioParam> smoothed_float_ptrs{};
+    int krate_divider = 1;
+    int krate_counter = 0;
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)

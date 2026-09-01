@@ -40,7 +40,7 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
 
     read_input_buffer_from_host(buffer);
     read_midi_from_host(host_midi_buffer);
-    update_parameters(block_size, processor.getPlayHead());
+    update_parameters(processor.getPlayHead());
     csound.process_block(block_size);
     write_output_buffer_to_host(buffer);
     write_midi_to_host(host_midi_buffer, block_start_global_sample, block_size);
@@ -124,8 +124,8 @@ void Processor::write_midi_to_host(juce::MidiBuffer& host_midi_messages, int blo
 }
 
 
-void Processor::update_parameters(int block_size, juce::AudioPlayHead* play_head) {
-    parameters.update_on_process(block_size, play_head);
+void Processor::update_parameters(juce::AudioPlayHead* play_head) {
+    parameters.update_on_process(play_head);
 }
 
 void Processor::getStateInformation (juce::MemoryBlock& destData) {
