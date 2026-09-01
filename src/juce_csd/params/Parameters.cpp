@@ -257,7 +257,7 @@ void Parameters::update_audio_params(Csound* csound, int block_size) {
   }
 }
 
-void CachedParam::set_value(Csound* csound, double value_to_send) {
+void CachedInputParam::set_value(Csound* csound, double value_to_send) {
     // Only call Csound API if value has changed
     if (has_changed(value_to_send)) {
       if (channel_ptr != nullptr) {
@@ -310,7 +310,7 @@ void Parameters::update_sensor_params(Csound* csound) {
 }
 
 namespace {
-  void set_optional_csound_param(Csound* csound, CachedParam& param, const juce::Optional<double>& value) {
+  void set_optional_csound_param(Csound* csound, CachedInputParam& param, const juce::Optional<double>& value) {
      if (value.hasValue()) {
        param.set_value(csound, *value);
      }

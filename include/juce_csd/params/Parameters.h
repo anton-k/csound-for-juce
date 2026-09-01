@@ -187,11 +187,11 @@ using CsoundChannelPtr = void*;
 /// Cached parameter. structure for efficient update of the Csound parameters
 // It ensures that parameter update is not triggered over Csound API if values
 // has not changed
-struct CachedParam {
+struct CachedInputParam {
     std::string id;
     CsoundChannelPtr channel_ptr{nullptr};
 
-    CachedParam(Csound* csound, const std::string& id_): id(id_) {
+    CachedInputParam(Csound* csound, const std::string& id_): id(id_) {
       // TODO: for sensor channels we should use CSOUND_OUTPUT_CHANNEL
       // and for host params we should use CSOUND_INPUT_CHANNEL
         int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL);
@@ -218,7 +218,7 @@ struct CachedParam {
 
 struct AudioParam {
   ParameterPtr ptr;
-  CachedParam cached;
+  CachedInputParam cached;
 
   AudioParam(Csound* csound, const std::string& id, ParameterPtr param_ptr_):
     ptr(param_ptr_), cached(csound, id) {};
@@ -226,7 +226,7 @@ struct AudioParam {
 
 struct HostParam {
   HostParameterType parameter_type;
-  CachedParam cached;
+  CachedInputParam cached;
 
   HostParam(Csound* csound, const HostParameterSpec& spec):
     parameter_type(spec.parameter_type),
