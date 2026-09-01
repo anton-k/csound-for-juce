@@ -57,10 +57,6 @@ architectural improvements are needed:
 
 4. Real-Time (RT) Safety & DSP Robustness
 
- • Denormal Protection: There is no explicit denormal flushing (e.g.,
-   juce::ScopedNoDenormals) in the processBlock scope. While Csound handles some
-   of this internally, JUCE plugins should enforce it at the entry point to
-   prevent massive CPU spikes on x86 architectures.
  • String Lookups in the Audio Thread: update_cached_audio_params calls
    csound->SetControlChannel(cached.id.c_str(), ...). While .c_str() doesn't
    allocate, Csound's internal channel lookup uses a hash map. In Csound 6, this
@@ -129,14 +125,8 @@ glitches, or corrupt user projects.
  • Action: Add a "version": 1 integer to the root of the JSON in JsonSerializer. In
    deserialize, check this version and apply migration logic if loading an older state.
 
-4. Denormal Protection
 
- • Why: Processing silence or very quiet audio can cause floating-point denormals, leading to
-   massive CPU spikes (up to 100%) on x86 architectures.
- • Action: Wrap the contents of juce_csd::Processor::processBlock in a juce::ScopedNoDenormals
-   scope.
-
-5. Smooth Bypass / DSP Fallback
+4. Smooth Bypass / DSP Fallback
 
  • Why: If the host bypasses the plugin, or the user clicks a bypass button, abruptly stopping
    Csound processing or passing uninitialized buffers will cause loud clicks/pops.
@@ -221,7 +211,6 @@ Summary Strategy for v1.0
 To get to v1.0 quickly and safely:
 
  1 Fix the RT-safety parameter lookups (use GetChannelPtr).
- 2 Add juce::ScopedNoDenormals and Message Callbacks.
  3 Add a "version" tag to your JSON state.
  4 Release v1.0.
 
@@ -466,7 +455,6 @@ The "Finish Line" Checklist (Effort Assessment)
 
 Easy (1-2 Days):
 
- • Denormal Protection: Add juce::ScopedNoDenormals in processBlock.
  • Message Routing: Add csound->SetMessageCallback() to stop Csound from printing
    to the DAW's console.
  • State Versioning: Add a "version": 1 integer to your JSON serializer.

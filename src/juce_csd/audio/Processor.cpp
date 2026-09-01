@@ -22,7 +22,12 @@ void Processor::prepareToPlay (double sample_rate, int max_block_size)
 
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)
 {
+
+    // JUCE plugins should enforce it at the entry point to
+    // prevent massive CPU spikes on x86 architectures.
     const juce::ScopedNoDenormals noDenormals;
+
+    // Csound processing
     if (!csound.is_ready_to_play()) {
         // Safety: If not ready, clear the buffer to prevent passing garbage/previous data to the host
         buffer.clear();
