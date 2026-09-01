@@ -119,10 +119,7 @@ void Processor::write_midi_to_host(juce::MidiBuffer& host_midi_messages, int blo
 
 
 void Processor::update_parameters(int block_size, juce::AudioPlayHead* play_head) {
-    Csound* csound_ptr = csound.get_csound();
-    if (csound_ptr != nullptr) {
-        parameters.update_on_process(csound_ptr, block_size, play_head);
-    }
+    parameters.update_on_process(block_size, play_head);
 }
 
 void Processor::getStateInformation (juce::MemoryBlock& destData) {

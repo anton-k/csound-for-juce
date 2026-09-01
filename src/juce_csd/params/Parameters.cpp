@@ -177,6 +177,7 @@ void Parameters::init_sensor_parameters(const std::vector<SensorParameterSpec>& 
 void Parameters::prepare(Csound* csound, double sample_rate, int max_block_size) {
   prepare_cached_audio_parameters(csound, sample_rate, max_block_size);
   prepare_cached_host_parameters(csound);
+  prepare_sensor_parameters(csound);
 }
 
 // TODO: do not put in cache paraeters with nullptr as prameter.ptr
@@ -211,7 +212,6 @@ void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_r
     }
 }
 
-// TODO: implement me
 void Parameters::prepare_cached_host_parameters(Csound* csound) {
   cached_host_parameters.reserve(host_parameters.size());
   cached_host_parameters.clear();
@@ -220,9 +220,17 @@ void Parameters::prepare_cached_host_parameters(Csound* csound) {
   }
 }
 
-void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
+void Parameters::prepare_sensor_parameters(Csound* csound) {
+  sensor_parameter_ptrs.reserve(sensor_parameters.size());
+  sensor_parameter_ptrs.clear();
+  for (auto& [id, param]: sensor_parameters) {
+    sensor_parameter_ptrs.push_back(SensorParam(csound, id, param));
+  }
+}
+
+void Parameters::update_on_process(int block_size, juce::AudioPlayHead* play_head) {
   update_audio_params(block_size);
-  update_sensor_params(csound);
+  update_sensor_params();
   update_host_params(play_head);
 }
 
@@ -258,7 +266,6 @@ void Parameters::update_audio_params(int block_size) {
 }
 
 void CachedInputParam::set_value(double value_to_send) {
-    // Only call Csound API if value has changed
     if (has_changed(value_to_send)) {
       if (channel_ptr != nullptr) {
         *static_cast<MYFLT*>(channel_ptr) = static_cast<MYFLT>(value_to_send);
@@ -267,9 +274,17 @@ void CachedInputParam::set_value(double value_to_send) {
     }
 }
 
-void Parameters::update_sensor_params(Csound* csound) {
-  for (auto& param: sensor_parameters) {
-    param.second.store(csound->GetControlChannel(param.first.c_str()));
+double OutputParam::get_value() {
+      if (channel_ptr != nullptr) {
+        return *static_cast<MYFLT*>(channel_ptr);
+      } else {
+        return default_value;
+      }
+}
+
+void Parameters::update_sensor_params() {
+  for (auto& param: sensor_parameter_ptrs) {
+    param.update();
   }
 }
 

@@ -218,9 +218,10 @@ struct CachedInputParam {
 
 struct OutputParam {
   std::string id;
+  double default_value{0.0};
   CsoundChannelPtr channel_ptr{nullptr};
 
-  OutputParam(Csound* csound, const std::string& id_): id(id_) {
+  OutputParam(Csound* csound, const std::string& id_, double default_value_): id(id_), default_value(default_value_) {
     int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL | CSOUND_OUTPUT_CHANNEL);
     if (status != 0) {
       channel_ptr = nullptr;
@@ -248,6 +249,19 @@ struct HostParam {
   {}
 };
 
+struct SensorParam {
+  SensorParam(Csound* csound, const std::string& id, std::atomic<float>& value_ref_):
+    value_ref(value_ref_), param(csound, id, 0.0)
+  {}
+
+  void update() {
+    value_ref.store(param.get_value());
+  }
+
+  std::atomic<float>& value_ref;
+  OutputParam param;
+};
+
 /// Plugin parameters
 class Parameters {
   public:
@@ -257,7 +271,7 @@ class Parameters {
     void prepare(Csound* csound, double sample_rate, int max_block_size);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
-    void update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head);
+    void update_on_process(int block_size, juce::AudioPlayHead* play_head);
 
     /// Serializes the parameters to JSON. Only audio and UI parameters are persisted
     void getStateInformation (juce::MemoryBlock& destData);
@@ -290,6 +304,7 @@ class Parameters {
   private:
     void prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size);
     void prepare_cached_host_parameters(Csound* csound);
+    void prepare_sensor_parameters(Csound* csound);
 
     void init_float_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterFloatSpec>&);
     void init_bool_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterBoolSpec>&);
@@ -300,7 +315,7 @@ class Parameters {
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
     void update_audio_params(int block_size);
-    void update_sensor_params(Csound* csound);
+    void update_sensor_params();
     void update_host_params(juce::AudioPlayHead* play_head);
 
     AudioParameterList audio_parameters;
@@ -310,6 +325,7 @@ class Parameters {
 
     std::vector<AudioParam> cached_audio_parameters{};
     std::vector<HostParam> cached_host_parameters{};
+    std::vector<SensorParam> sensor_parameter_ptrs{};
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)
