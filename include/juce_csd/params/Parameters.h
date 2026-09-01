@@ -165,7 +165,7 @@ using HostParameterList = std::vector<HostParameterSpec>;
 
 /// Parameter specification. It lists all parameters for the application.
 struct ParameterSpec {
-  int version;
+  int version{0};
   std::vector<AudioParameterFloatSpec> audio_floats{}; ///< float audio parameters
   std::vector<AudioParameterBoolSpec> audio_bools{}; ///< boolean audio parameters
   std::vector<AudioParameterChoiceSpec> audio_choices{}; ///< choice audio parameters
@@ -184,7 +184,6 @@ using UiParameterSpecMap = std::map<std::string, UiParameterSpec>;
 /// Parameter specification as map for fast lookup of the default values.
 struct ParameterSpecMap {
   ParameterSpecMap(const ParameterSpec& spec);
-
   int version;
   AudioParameterFloatSpecMap audio_floats{}; ///< float audio parameters
   AudioParameterBoolSpecMap audio_bools{}; ///< boolean audio parameters

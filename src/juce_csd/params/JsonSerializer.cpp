@@ -30,7 +30,7 @@ void JsonSerializer::serialize(const ParameterSpecMap& spec, const AudioParamete
         }
     }
 
-    // 3. Choices: Use the NormalisableRange to convert the 0-based index to 0.0 - 1.0
+    // 3. Choices: save choice as int
     for (const auto& pair : audio_parameters.choices) {
         if (pair.second != nullptr) {
             json_data["audio"][pair.first] = pair.second->getIndex();
@@ -68,18 +68,26 @@ juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::Inp
         if (parsed_json.contains("audio") && parsed_json["audio"].is_object()) {
 
             // Floats
-            for (auto& pair : audio_parameters.floats) {
-                if (pair.second.param == nullptr) continue;
-                const std::string& id = pair.first;
-                if (parsed_json["audio"].contains(id)) {
+            for (auto& [id, param] : audio_parameters.floats) {
+                if (param.param == nullptr) continue;
+                if (parsed_json["audio"].contains(id) && parsed_json["audio"][id].is_number_float()) {
                     float normalized_value = parsed_json["audio"][id].get<float>();
 
                     // setValueNotifyingHost ALWAYS expects a normalized value (0.0 to 1.0)
-                    pair.second.param->setValueNotifyingHost(normalized_value);
+                    param.param->setValueNotifyingHost(normalized_value);
 
                     // Update your custom SmoothedParam with the actual (denormalized) value
-                    float actual_value = pair.second.param->convertFrom0to1(normalized_value);
-                    pair.second.set_target(actual_value, true); // force instant
+                    float actual_value = param.param->convertFrom0to1(normalized_value);
+                    param.set_target(actual_value, true); // force instant
+                } else {
+                    try {
+                        float actual_value = spec.audio_floats.at(id).default_value;
+                        param.set_target(actual_value, true); // force instant
+                        float normalized_value = param.param->convertTo0to1(actual_value);
+                        param.param->setValueNotifyingHost(normalized_value);
+                    } catch (const std::out_of_range& e) {
+                        // TODO: log error
+                    }
                 }
             }
 
@@ -87,9 +95,16 @@ juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::Inp
             for (auto& pair : audio_parameters.bools) {
                 if (pair.second == nullptr) continue;
                 const std::string& id = pair.first;
-                if (parsed_json["audio"].contains(id)) {
+                if (parsed_json["audio"].contains(id) && parsed_json["audio"][id].is_number()) {
                     float normalized_value = parsed_json["audio"][id].get<float>();
                     pair.second->setValueNotifyingHost(normalized_value);
+                } else {
+                    try {
+                        float normalized_value = static_cast<float>(spec.audio_bools.at(id).default_value);
+                        pair.second->setValueNotifyingHost(normalized_value);
+                    } catch (const std::out_of_range& e) {
+                        // TODO: log error
+                    }
                 }
             }
 
@@ -97,9 +112,17 @@ juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::Inp
             for (auto& pair : audio_parameters.ints) {
                 if (pair.second == nullptr) continue;
                 const std::string& id = pair.first;
-                if (parsed_json["audio"].contains(id)) {
+                if (parsed_json["audio"].contains(id) && parsed_json["audio"][id].is_number()) {
                     float normalized_value = parsed_json["audio"][id].get<float>();
                     pair.second->setValueNotifyingHost(normalized_value);
+                } else {
+                    try {
+                        float actual_value = static_cast<float>(spec.audio_ints.at(id).default_value);
+                        float normalized_value = pair.second->convertTo0to1(actual_value);
+                        pair.second->setValueNotifyingHost(normalized_value);
+                    } catch (const std::out_of_range& e) {
+                        // TODO: log error
+                    }
                 }
             }
 
@@ -107,11 +130,19 @@ juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::Inp
             for (auto& pair : audio_parameters.choices) {
                 if (pair.second == nullptr) continue;
                 const std::string& id = pair.first;
-                if (parsed_json["audio"].contains(id)) {
+                if (parsed_json["audio"].contains(id) && parsed_json["audio"][id].is_number_integer()) {
                     int index = parsed_json["audio"][id].get<int>();
                     float normalized_value =
                         pair.second->getNormalisableRange().convertTo0to1(static_cast<float>(index));
                     pair.second->setValueNotifyingHost(normalized_value);
+                } else {
+                    try {
+                        int index = spec.audio_choices.at(id).default_value;
+                        float normalized_value = pair.second->getNormalisableRange().convertTo0to1(static_cast<float>(index));
+                        pair.second->setValueNotifyingHost(normalized_value);
+                    } catch (const std::out_of_range& e) {
+                        // TODO: log error
+                    }
                 }
             }
         }
@@ -120,8 +151,15 @@ juce::Result JsonSerializer::deserialize(const ParameterSpecMap& spec, juce::Inp
         if (parsed_json.contains("ui") && parsed_json["ui"].is_object()) {
             for (auto& pair : ui_parameters) {
                 const std::string& id = pair.first;
-                if (parsed_json["ui"].contains(id)) {
+                if (parsed_json["ui"].contains(id) && parsed_json["ui"][id].is_number()) {
                     pair.second.store(parsed_json["ui"][id].get<float>());
+                } else {
+                    try {
+                        pair.second.store(spec.ui.at(id).default_value);
+                    } catch (const std::out_of_range& e) {
+                        // TODO: log error
+                    }
+
                 }
             }
         }
