@@ -1,9 +1,7 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
-#include <readerwriterqueue.h>
-using namespace moodycamel;
+#include <csd_plugin/audio/FastFifo.h>
 
 namespace csd_plugin {
 
@@ -12,7 +10,7 @@ namespace csd_plugin {
 class AudioBuffer {
   public:
     AudioBuffer(int capacity):
-      queue(std::make_unique<ReaderWriterQueue<float>>(capacity)),
+      queue(capacity),
       current_capacity(capacity)
     {}
 
@@ -35,7 +33,7 @@ class AudioBuffer {
     void reset(int capacity);
 
   private:
-    std::unique_ptr<ReaderWriterQueue<float>> queue{new ReaderWriterQueue<float>(0)};
+    FastFifo<float> queue;
     std::atomic<int> current_capacity{0};
 };
 

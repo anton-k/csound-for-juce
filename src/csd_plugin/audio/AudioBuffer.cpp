@@ -1,22 +1,20 @@
 
 #include <atomic>
-#include <memory>
-#include <readerwriterqueue.h>
 #include <csd_plugin/audio/AudioBuffer.h>
+#include <csd_plugin/audio/FastFifo.h>
 
-using namespace moodycamel;
 namespace csd_plugin {
 
 bool AudioBuffer::write(float sample) {
-  return queue->try_enqueue(sample);
+  return queue.push(sample);
 }
 
 bool AudioBuffer::read(float& sample) {
-  return queue->try_dequeue(sample);
+  return queue.read(sample);
 }
 
 int AudioBuffer::get_size() {
-  return queue->size_approx();
+  return queue.get_size();
 }
 
 int AudioBuffer::get_capacity() {
@@ -25,17 +23,14 @@ int AudioBuffer::get_capacity() {
 
 void AudioBuffer::reset(int capacity) {
   if (current_capacity.load() != capacity) {
-    queue.reset();
-    queue = std::make_unique<ReaderWriterQueue<float>>(capacity);
-    current_capacity.store(capacity);
+    queue.reset(capacity);
   } else {
     clear();
   }
 }
 
 void AudioBuffer::clear() {
-  float sample{0.f};
-  while (queue->try_dequeue(sample));
+  queue.clear();
 }
 
 }
