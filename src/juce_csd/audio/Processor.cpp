@@ -71,7 +71,7 @@ void Processor::read_input_buffer_from_host(juce::AudioBuffer<float>& buffer) {
         for (int sample_index = 0; sample_index < sample_size; ++sample_index) {
             for (int channel_index = 0; channel_index < csd_in_size; ++channel_index) {
                 if (channel_index < host_in_size) {
-                    csound.write_input(buffer.getSample(channel_index, sample_index));
+                    csound.write_input(static_cast<double>(buffer.getSample(channel_index, sample_index)));
                 } else {
                     csound.write_input(0.f); // Pad missing host channels with zeroes
                 }
@@ -87,16 +87,16 @@ void Processor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
     int sample_size = buffer.getNumSamples();
     int max_channels = std::max(csd_out_size, host_out_size);
 
-    float sample{0.0};
+    double sample{0.0};
     for (int sample_index = 0; sample_index < sample_size; ++sample_index) {
         for (int channel_index = 0; channel_index < max_channels; ++channel_index) {
             if (channel_index < csd_out_size) {
                 csound.read_output(sample);
             } else {
-                sample = 0.f;
+                sample = 0.0;
             }
             if (channel_index < host_out_size) {
-                buffer.setSample(channel_index, sample_index, sample);
+                buffer.setSample(channel_index, sample_index, static_cast<float>(sample));
             }
         }
     }

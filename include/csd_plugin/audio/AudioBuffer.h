@@ -15,10 +15,12 @@ class AudioBuffer {
     {}
 
     /// Writes sample to buffer
-    bool write(float);
+    bool write(double);
+    bool write_block(const double* data, int num_items);
 
     /// Reads sample from buffer
-    bool read(float&);
+    bool read(double&);
+    bool read_block(double* dest, int num_items);
 
     /// Clears the buffer
     void clear();
@@ -33,7 +35,7 @@ class AudioBuffer {
     void reset(int capacity);
 
   private:
-    FastFifo<float> queue;
+    FastFifo<double> queue;
     std::atomic<int> current_capacity{0};
 };
 

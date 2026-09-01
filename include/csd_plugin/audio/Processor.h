@@ -19,7 +19,7 @@ struct CsoundSettings {
     int sample_rate{44100};
     int out_size{2};
     int in_size{0};
-    float zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
+    double zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
     std::vector<std::string> channel_names;
 };
 
@@ -139,11 +139,11 @@ class Processor {
 
     /// Writes sample to the input audio buffer. Use it prior to process_block to read
     // all samples from the host
-    void write_input(float sample);
+    void write_input(double sample);
 
     /// Reads sample from the output audio buffer. Use it after process_block to read
     // read sampels processed with Csound and write them to the host.
-    void read_output(float& sample);
+    void read_output(double& sample);
 
     /// Is Csound ready to play
     bool is_ready_to_play() {

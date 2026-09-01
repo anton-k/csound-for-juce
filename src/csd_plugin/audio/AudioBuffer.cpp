@@ -5,12 +5,20 @@
 
 namespace csd_plugin {
 
-bool AudioBuffer::write(float sample) {
+bool AudioBuffer::write(double sample) {
   return queue.push(sample);
 }
 
-bool AudioBuffer::read(float& sample) {
+bool AudioBuffer::read(double& sample) {
   return queue.read(sample);
+}
+
+bool AudioBuffer::write_block(const double* data, int num_items) {
+  return queue.write_block(data, num_items);
+}
+
+bool AudioBuffer::read_block(double* dest, int num_items) {
+  return queue.read_block(dest, num_items);
 }
 
 int AudioBuffer::get_size() {

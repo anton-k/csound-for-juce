@@ -11,13 +11,13 @@
 #include <ranges>
 #include <format>
 
-const float WRAP_VOLUME_LIMIT = 5.0f;
+const double WRAP_VOLUME_LIMIT = 5.0f;
 
 namespace csd_plugin {
 
 namespace {
 
-float wrap_limiter(float sample) {
+double wrap_limiter(double sample) {
     return std::clamp(sample, -WRAP_VOLUME_LIMIT, WRAP_VOLUME_LIMIT);
 }
 
@@ -68,11 +68,11 @@ int Processor::get_latency_samples() {
     }
 }
 
-void Processor::write_input(float sample) {
+void Processor::write_input(double sample) {
     audio_buffers.in().write(csound_settings.zero_dbfs * sample);
 }
 
-void Processor::read_output(float& sample) {
+void Processor::read_output(double& sample) {
     audio_buffers.out().read(sample);
     sample = wrap_limiter(csound_settings.inverse_zero_dbfs * sample);
 }
@@ -241,6 +241,7 @@ void Processor::csound_process(int buffer_size) {
     csound_cycle_size = get_csound_cycle_size(buffer_size);
     int in_size = io_layout.get_total_in_size();
     int out_size = io_layout.get_out_size();
+    int ksmps = csound_settings.ksmps;
 
     float sample{0.0};
     for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
@@ -248,14 +249,7 @@ void Processor::csound_process(int buffer_size) {
 
         if (in_size > 0) {
             double* spin = csound->GetSpin();
-            for (int index: std::ranges::iota_view(0, csound_settings.ksmps)) {
-                for (int channel: std::ranges::iota_view(0, in_size)) {
-                    if (!audio_buffers.in().read(sample)) {
-                        sample = 0.0f;
-                    }
-                    spin[in_size * index + channel] = static_cast<double>(sample);
-                }
-            }
+            audio_buffers.in().read_block(spin, ksmps * in_size);
         }
 
         if (krate_callback) {
@@ -265,11 +259,7 @@ void Processor::csound_process(int buffer_size) {
         csound->PerformKsmps();
 
         const double* spout = csound->GetSpout();
-        for (int index: std::ranges::iota_view(0, static_cast<int>(csound_settings.ksmps))) {
-            for (int channel: std::ranges::iota_view(0, out_size)) {
-                audio_buffers.out().write(spout[out_size * index + channel]);
-            }
-        }
+        audio_buffers.out().write_block(spout, ksmps * out_size);
         current_sample = current_cycle_end_sample;
     }
 }
