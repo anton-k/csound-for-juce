@@ -258,6 +258,10 @@ void Processor::csound_process(int buffer_size) {
             }
         }
 
+        if (krate_callback) {
+            krate_callback();
+        }
+
         csound->PerformKsmps();
 
         const double* spout = csound->GetSpout();

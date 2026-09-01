@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <csound/csound.hpp>
 #include <memory>
 #include <sys/types.h>
@@ -172,6 +173,14 @@ class Processor {
     /// Returns absolute processing time in samples (How many samples were processed so far from the call to prepare_to_play)
     int get_current_sample();
 
+
+    /// Set a callback to be executed right before each Csound ksmps cycle.
+    /// Use this to update parameters at the k-rate.
+    void set_krate_callback(std::function<void()> callback) {
+        krate_callback = std::move(callback);
+    }
+
+
   private:
     void csound_process(int block_size);
     int get_csound_cycle_size(int block_size);
@@ -200,6 +209,7 @@ class Processor {
     std::atomic<bool> is_processing_{false};
     int current_sample_rate{0};
     int current_max_block_size{0};
+    std::function<void()> krate_callback;
 };
 
 }
