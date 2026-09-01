@@ -150,6 +150,24 @@ functional v1.0 release.
 
 5. JSON declarative migration: do we need it if we will migrate to APVTS?
 
+
+6. The is_processing_ Spin-Lock
+
+In src/csd_plugin/audio/Processor.cpp, you use a spin-lock to protect Csound re-initialization:
+
+
+while (is_processing_.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+}
+
+
+This is a standard and effective way to protect the Csound pointer without using a std::mutex (which
+would block the audio thread). Edge Case: If the audio thread is suspended by the OS (e.g., a debugger
+breakpoint, or extreme priority inversion), the message thread will spin forever and freeze the DAW UI.
+Action: This is generally acceptable for v1.0, but for v1.1, you might want to add a timeout or a
+fallback mechanism to prevent infinite UI hangs during debugging.
+
+
 -----------------------------------------------------------------------------------------------
 
 🟢 P2: Deferred to v1.2+ (Advanced / Niche)

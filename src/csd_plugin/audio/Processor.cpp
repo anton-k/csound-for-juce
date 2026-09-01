@@ -243,7 +243,7 @@ void Processor::csound_process(int buffer_size) {
     int out_size = io_layout.get_out_size();
 
     float sample{0.0};
-    for (int cycle_index: std::ranges::iota_view(0, csound_cycle_size)) {
+    for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
         current_cycle_end_sample = current_sample + csound_settings.ksmps;
 
         if (in_size > 0) {

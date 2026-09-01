@@ -15,7 +15,7 @@
 
 namespace juce_csd {
 
-static const int PARAMETER_SMOOTH_RATE = 1500;
+inline constexpr int PARAMETER_SMOOTH_RATE = 1500;
 
 /**
  * @brief Defines weather we should smooth parameter changes.
