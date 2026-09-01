@@ -182,16 +182,19 @@ using ParameterPtr = std::variant<
     juce::AudioParameterInt*>;
 
 
+using CsoundChannelPtr = void*;
+
 /// Cached parameter. structure for efficient update of the Csound parameters
 // It ensures that parameter update is not triggered over Csound API if values
 // has not changed
 struct CachedParam {
     std::string id;
-    void* channel_ptr;
-    ParameterPtr param_ptr;
+    CsoundChannelPtr channel_ptr{nullptr};
 
-    CachedParam(Csound* csound, const std::string& id_, ParameterPtr param_ptr_): id(id_), param_ptr(param_ptr_) {
-        int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL);
+    CachedParam(Csound* csound, const std::string& id_): id(id_) {
+      // TODO: for sensor channels we should use CSOUND_OUTPUT_CHANNEL
+      // and for host params we should use CSOUND_INPUT_CHANNEL
+        int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL);
         if (status != 0) {
           channel_ptr = nullptr;
         }
@@ -211,6 +214,24 @@ struct CachedParam {
         previous_value = new_value;
         has_been_initialized = true;
     }
+};
+
+struct AudioParam {
+  ParameterPtr ptr;
+  CachedParam cached;
+
+  AudioParam(Csound* csound, const std::string& id, ParameterPtr param_ptr_):
+    ptr(param_ptr_), cached(csound, id) {};
+};
+
+struct HostParam {
+  HostParameterType parameter_type;
+  CachedParam cached;
+
+  HostParam(Csound* csound, const HostParameterSpec& spec):
+    parameter_type(spec.parameter_type),
+    cached(csound, spec.id)
+  {}
 };
 
 /// Plugin parameters
@@ -253,6 +274,9 @@ class Parameters {
     std::optional<float> get_sensor_parameter(const std::string& id);
 
   private:
+    void prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size);
+    void prepare_cached_host_parameters(Csound* csound);
+
     void init_float_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterFloatSpec>&);
     void init_bool_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterBoolSpec>&);
     void init_choice_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterChoiceSpec>&);
@@ -261,7 +285,7 @@ class Parameters {
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
-    void update_cached_audio_params(Csound* csound, int block_size);
+    void update_audio_params(Csound* csound, int block_size);
     void update_float_audio_params(Csound* csound, int block_size);
     void update_bool_audio_params(Csound* csound);
     void update_choice_audio_params(Csound* csound);
@@ -273,7 +297,9 @@ class Parameters {
     UiParameterList ui_parameters;
     SensorParameterList sensor_parameters;
     HostParameterList host_parameters;
-    std::vector<CachedParam> cached_parameters;
+
+    std::vector<AudioParam> cached_audio_parameters{};
+    std::vector<HostParam> cached_host_parameters{};
 
     JUCE_DECLARE_NON_COPYABLE(Parameters)
     JUCE_DECLARE_NON_MOVEABLE(Parameters)

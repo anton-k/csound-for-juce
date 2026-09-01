@@ -175,44 +175,54 @@ void Parameters::init_sensor_parameters(const std::vector<SensorParameterSpec>& 
 }
 
 void Parameters::prepare(Csound* csound, double sample_rate, int max_block_size) {
-    cached_parameters.reserve(
+  prepare_cached_audio_parameters(csound, sample_rate, max_block_size);
+  prepare_cached_host_parameters(csound);
+}
+
+// TODO: do not put in cache paraeters with nullptr as prameter.ptr
+void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size) {
+    cached_audio_parameters.reserve(
         audio_parameters.floats.size() +
         audio_parameters.bools.size() +
         audio_parameters.choices.size() +
         audio_parameters.ints.size()
     );
-    cached_parameters.clear();
+    cached_audio_parameters.clear();
 
     // Cache float parameters
     for (auto& [id, param] : audio_parameters.floats) {
         param.set_sample_rate(static_cast<float>(sample_rate));
-        cached_parameters.push_back(CachedParam{csound, id, ParameterPtr(&param)});
+        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(&param)});
     }
 
     // Cache bool parameters
     for (auto& [id, param] : audio_parameters.bools) {
-        cached_parameters.push_back(CachedParam{csound, id, ParameterPtr(param)});
+        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 
     // Cache int parameters
     for (auto& [id, param] : audio_parameters.ints) {
-        cached_parameters.push_back(CachedParam{csound, id, ParameterPtr(param)});
+        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 
     // Cache choice parameters
     for (auto& [id, param] : audio_parameters.choices) {
-        cached_parameters.push_back(CachedParam{csound, id, ParameterPtr(param)});
+        cached_audio_parameters.push_back(AudioParam{csound, id, ParameterPtr(param)});
     }
 }
 
+// TODO: implement me
+void Parameters::prepare_cached_host_parameters(Csound* csound) {
+}
+
 void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
-  update_cached_audio_params(csound, block_size);
+  update_audio_params(csound, block_size);
   update_sensor_params(csound);
   update_host_params(csound, play_head);
 }
 
-void Parameters::update_cached_audio_params(Csound* csound, int block_size) {
-  for (auto& cached : cached_parameters) {
+void Parameters::update_audio_params(Csound* csound, int block_size) {
+  for (auto& audio_parameter : cached_audio_parameters) {
     std::visit([&](auto* param) {
       using ParamType = std::remove_pointer_t<decltype(param)>;
 
@@ -222,23 +232,23 @@ void Parameters::update_cached_audio_params(Csound* csound, int block_size) {
           if (param->param != nullptr) {
               float new_target = param->param->get();
               param->set_target(new_target);
-              cached.set_value(csound, param->process(block_size));
+              audio_parameter.cached.set_value(csound, param->process(block_size));
           }
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterBool>) {
             // Boolean parameter
-            cached.set_value(csound, param->get() ? 1.0 : 0.0);
+            audio_parameter.cached.set_value(csound, param->get() ? 1.0 : 0.0);
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterChoice>) {
             // Choice parameter
-            cached.set_value(csound, static_cast<double>(param->getIndex()));
+            audio_parameter.cached.set_value(csound, static_cast<double>(param->getIndex()));
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterInt>) {
             // Integer parameter
-            cached.set_value(csound, static_cast<double>(param->get()));
+            audio_parameter.cached.set_value(csound, static_cast<double>(param->get()));
         }
       }
-    }, cached.param_ptr);
+    }, audio_parameter.ptr);
   }
 }
 
@@ -247,8 +257,6 @@ void CachedParam::set_value(Csound* csound, double value_to_send) {
     if (has_changed(value_to_send)) {
       if (channel_ptr != nullptr) {
         *static_cast<MYFLT*>(channel_ptr) = static_cast<MYFLT>(value_to_send);
-      } else {
-        csound->SetControlChannel(id.c_str(), value_to_send);
       }
       update_value(value_to_send);
     }
