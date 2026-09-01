@@ -35,8 +35,14 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
     // prevent massive CPU spikes on x86 architectures.
     const juce::ScopedNoDenormals noDenormals;
 
-    // Csound processing
-    if (!csound.is_ready_to_play()) {
+    // Check if the host has bypassed the plugin
+    bool is_bypassed = false;
+    if (auto* bypass_param = processor.getBypassParameter()) {
+        is_bypassed = (bypass_param->getValue() > 0.5f);
+    }
+
+    // Skip Csound processing if plugin is bypassed or csound is not ready
+    if (is_bypassed || !csound.is_ready_to_play()) {
         // Safety: If not ready, clear the buffer to prevent passing garbage/previous data to the host
         buffer.clear();
         host_midi_buffer.clear();

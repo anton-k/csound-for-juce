@@ -19,7 +19,6 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-
 private:
     AudioPluginAudioProcessor& processorRef;
     juce::Slider size_knob, tone_knob, mix_knob;

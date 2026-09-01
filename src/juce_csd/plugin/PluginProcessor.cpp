@@ -72,8 +72,12 @@ bool PluginProcessor::isMidiEffect() const
 
 double PluginProcessor::getTailLengthSeconds() const
 {
-    return 0.0;
+    // Default to infinity to safely handle all Csound ADSR releases and FX tails.
+    // The DAW will keep the plugin alive as long as it is on the track.
+    return std::numeric_limits<double>::infinity();
 }
+
+
 
 int PluginProcessor::getNumPrograms()
 {

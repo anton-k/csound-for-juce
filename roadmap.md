@@ -38,3 +38,7 @@ glitches, or corrupt user projects.
       audio.
     3 Expose a bool is_csound_valid() or a std::string get_last_error() method so the UI can display a
       red "Compilation Error" banner to the user instead of just outputting silence.
+
+4. Use juce logger to load edge cases and errors
+
+5. provide convinient UI utils to show errors
