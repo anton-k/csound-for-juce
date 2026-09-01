@@ -41,4 +41,21 @@ glitches, or corrupt user projects.
 
 4. Use juce logger to load edge cases and errors
 
-5. provide convinient UI utils to show errors
+5. provide convinient UI utils to show errors (or reuse ones if JUCE provides it).
+    Write instructions on how to read logs and add custom logs for debugging
+
+6. Add examples for plugins
+
+   * plugin that uses sensors (metering plugin)
+   * plugin that uses host params (metronome or delay that reads bpm)
+   * plugin with sidechain (for example envelope follower or gate plugin)
+   * plugin that only processes midi (for example transpose plugin)
+
+7. Add quickstart guide on how to define synthesizer plugin as it's very common case
+
+8. After it's thoroughly tested on various plugins move `csd_plugin` to a separate repo.
+
+9. Cross-compilation. Check windows compilation.
+
+10. Packaging plugin instructions and how to add libcsound to the plugin
+and distribute with the plugin
