@@ -14,6 +14,8 @@ endif()
 # ---------------------------------------------------------
 include(cmake/CPM.cmake)
 
+CPMAddPackage("gh:catchorg/Catch2@3.5.2")
+
 if(NOT TARGET juce::juce_audio_processors)
     CPMAddPackage("gh:juce-framework/JUCE#3af3ce009f6a02f6fa651008fffb5b41743a9fab")
 endif()
@@ -82,3 +84,10 @@ target_compile_definitions(juce_csd PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
 )
+
+enable_testing()
+add_executable(fifo_tests tests/test_fast_fifo.cpp)
+target_link_libraries(fifo_tests PRIVATE juce_csd Catch2::Catch2WithMain)
+# Standard CTest integration (built into CMake, no Catch2 modules needed)
+add_test(NAME FastFifoTests COMMAND fifo_tests)
+
