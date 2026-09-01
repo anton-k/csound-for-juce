@@ -221,12 +221,12 @@ void Parameters::prepare_cached_host_parameters(Csound* csound) {
 }
 
 void Parameters::update_on_process(Csound* csound, int block_size, juce::AudioPlayHead* play_head) {
-  update_audio_params(csound, block_size);
+  update_audio_params(block_size);
   update_sensor_params(csound);
-  update_host_params(csound, play_head);
+  update_host_params(play_head);
 }
 
-void Parameters::update_audio_params(Csound* csound, int block_size) {
+void Parameters::update_audio_params(int block_size) {
   for (auto& audio_parameter : cached_audio_parameters) {
     std::visit([&](auto* param) {
       using ParamType = std::remove_pointer_t<decltype(param)>;
@@ -237,27 +237,27 @@ void Parameters::update_audio_params(Csound* csound, int block_size) {
           if (param->param != nullptr) {
               float new_target = param->param->get();
               param->set_target(new_target);
-              audio_parameter.cached.set_value(csound, param->process(block_size));
+              audio_parameter.cached.set_value(param->process(block_size));
           }
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterBool>) {
             // Boolean parameter
-            audio_parameter.cached.set_value(csound, param->get() ? 1.0 : 0.0);
+            audio_parameter.cached.set_value(param->get() ? 1.0 : 0.0);
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterChoice>) {
             // Choice parameter
-            audio_parameter.cached.set_value(csound, static_cast<double>(param->getIndex()));
+            audio_parameter.cached.set_value(static_cast<double>(param->getIndex()));
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterInt>) {
             // Integer parameter
-            audio_parameter.cached.set_value(csound, static_cast<double>(param->get()));
+            audio_parameter.cached.set_value(static_cast<double>(param->get()));
         }
       }
     }, audio_parameter.ptr);
   }
 }
 
-void CachedInputParam::set_value(Csound* csound, double value_to_send) {
+void CachedInputParam::set_value(double value_to_send) {
     // Only call Csound API if value has changed
     if (has_changed(value_to_send)) {
       if (channel_ptr != nullptr) {
@@ -267,42 +267,6 @@ void CachedInputParam::set_value(Csound* csound, double value_to_send) {
     }
 }
 
-void Parameters::update_float_audio_params(Csound* csound, int block_size) {
-  for (auto& param: audio_parameters.floats) {
-    auto& sp = param.second;
-    if (sp.param != nullptr) {
-      float new_target = sp.param->get();
-      sp.set_target(new_target);
-      float value_to_send = sp.process(block_size);
-      csound->SetControlChannel(param.first.c_str(), static_cast<double>(value_to_send));
-    }
-  }
-}
-
-void Parameters::update_bool_audio_params(Csound* csound) {
-  for (auto& param: audio_parameters.bools) {
-    if (param.second != nullptr) {
-      csound->SetControlChannel(param.first.c_str(), (param.second->get()? 1.0: 0.0));
-    }
-  }
-}
-
-void Parameters::update_choice_audio_params(Csound* csound) {
-  for (auto& param: audio_parameters.choices) {
-    if (param.second != nullptr) {
-      csound->SetControlChannel(param.first.c_str(), static_cast<double>(param.second->getIndex()));
-    }
-  }
-}
-
-void Parameters::update_int_audio_params(Csound* csound) {
-  for (auto& param: audio_parameters.ints) {
-    if (param.second != nullptr) {
-      csound->SetControlChannel(param.first.c_str(), static_cast<double>(param.second->get()));
-    }
-  }
-}
-
 void Parameters::update_sensor_params(Csound* csound) {
   for (auto& param: sensor_parameters) {
     param.second.store(csound->GetControlChannel(param.first.c_str()));
@@ -310,14 +274,14 @@ void Parameters::update_sensor_params(Csound* csound) {
 }
 
 namespace {
-  void set_optional_csound_param(Csound* csound, CachedInputParam& param, const juce::Optional<double>& value) {
+  void set_optional_csound_param(CachedInputParam& param, const juce::Optional<double>& value) {
      if (value.hasValue()) {
-       param.set_value(csound, *value);
+       param.set_value(*value);
      }
   }
 }
 
-void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_head) {
+void Parameters::update_host_params(juce::AudioPlayHead* play_head) {
   if (host_parameters.empty() || play_head == nullptr) return;
 
   auto pos_info = play_head->getPosition();
@@ -327,24 +291,24 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
    for (auto& param: cached_host_parameters) {
      switch (param.parameter_type) {
        case (HostParameterType::Bpm): {
-         set_optional_csound_param(csound, param.cached, pos->getBpm());
+         set_optional_csound_param(param.cached, pos->getBpm());
          break;
        }
 
        case (HostParameterType::TimeInSamples): {
-         set_optional_csound_param(csound, param.cached, pos->getTimeInSamples());
+         set_optional_csound_param(param.cached, pos->getTimeInSamples());
          break;
        }
 
        case (HostParameterType::TimeInSeconds): {
-         set_optional_csound_param(csound, param.cached, pos->getTimeInSeconds());
+         set_optional_csound_param(param.cached, pos->getTimeInSeconds());
          break;
        }
 
        case (HostParameterType::TimeSigNumerator): {
           auto opt_signature = pos->getTimeSignature();
           if (opt_signature.hasValue()) {
-            param.cached.set_value(csound, static_cast<double>(opt_signature->numerator));
+            param.cached.set_value(static_cast<double>(opt_signature->numerator));
           }
           break;
        }
@@ -352,45 +316,45 @@ void Parameters::update_host_params(Csound* csound, juce::AudioPlayHead* play_he
        case (HostParameterType::TimeSigDenominator): {
           auto opt_signature = pos->getTimeSignature();
           if (opt_signature.hasValue()) {
-            param.cached.set_value(csound, static_cast<double>(opt_signature->denominator));
+            param.cached.set_value(static_cast<double>(opt_signature->denominator));
           }
           break;
        }
 
        case (HostParameterType::IsPlaying): {
-         param.cached.set_value(csound, pos->getIsPlaying() ? 1.0 : 0.0);
+         param.cached.set_value(pos->getIsPlaying() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::IsRecording): {
-         param.cached.set_value(csound, pos->getIsRecording() ? 1.0 : 0.0);
+         param.cached.set_value(pos->getIsRecording() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::IsLooping): {
-         param.cached.set_value(csound, pos->getIsLooping() ? 1.0 : 0.0);
+         param.cached.set_value(pos->getIsLooping() ? 1.0 : 0.0);
          break;
        }
 
        case (HostParameterType::QuarterNotesPosition): {
-         set_optional_csound_param(csound, param.cached, pos->getPpqPosition());
+         set_optional_csound_param(param.cached, pos->getPpqPosition());
          break;
        }
 
        case (HostParameterType::QuarterNotesPositionOfLastBarStart): {
-         set_optional_csound_param(csound, param.cached, pos->getPpqPositionOfLastBarStart());
+         set_optional_csound_param(param.cached, pos->getPpqPositionOfLastBarStart());
          break;
        }
 
        case (HostParameterType::BarCount): {
-         set_optional_csound_param(csound, param.cached, pos->getBarCount());
+         set_optional_csound_param(param.cached, pos->getBarCount());
          break;
        }
 
        case (HostParameterType::FrameRate): {
          auto rate = pos->getFrameRate();
          if (rate.hasValue()) {
-           param.cached.set_value(csound, rate->getBaseRate());
+           param.cached.set_value(rate->getBaseRate());
          }
          break;
        }

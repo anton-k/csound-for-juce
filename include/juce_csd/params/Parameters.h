@@ -208,12 +208,26 @@ struct CachedInputParam {
         return std::abs(new_value - previous_value) > epsilon;
     }
 
-    void set_value(Csound* csound, double new_value);
+    void set_value(double new_value);
 
     void update_value(double new_value) {
         previous_value = new_value;
         has_been_initialized = true;
     }
+};
+
+struct OutputParam {
+  std::string id;
+  CsoundChannelPtr channel_ptr{nullptr};
+
+  OutputParam(Csound* csound, const std::string& id_): id(id_) {
+    int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+    if (status != 0) {
+      channel_ptr = nullptr;
+    }
+  }
+
+  double get_value();
 };
 
 struct AudioParam {
@@ -285,13 +299,9 @@ class Parameters {
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
     void init_host_parameters(const std::vector<HostParameterSpec>&);
 
-    void update_audio_params(Csound* csound, int block_size);
-    void update_float_audio_params(Csound* csound, int block_size);
-    void update_bool_audio_params(Csound* csound);
-    void update_choice_audio_params(Csound* csound);
-    void update_int_audio_params(Csound* csound);
+    void update_audio_params(int block_size);
     void update_sensor_params(Csound* csound);
-    void update_host_params(Csound* csound, juce::AudioPlayHead* play_head);
+    void update_host_params(juce::AudioPlayHead* play_head);
 
     AudioParameterList audio_parameters;
     UiParameterList ui_parameters;
