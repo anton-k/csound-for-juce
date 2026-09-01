@@ -18,6 +18,14 @@ void Processor::prepareToPlay (double sample_rate, int max_block_size)
 {
     csound.prepare_to_play(static_cast<int>(std::round(sample_rate)),  max_block_size);
     parameters.prepare(csound.get_csound(), sample_rate, max_block_size);
+
+    // Bind the k-rate callback
+    int ksmps = csound.get_csound_settings().ksmps;
+    csound.set_krate_callback([this, ksmps]() {
+        // This runs inside the csd_plugin loop, once per ksmps block!
+        parameters.update_krate_params(ksmps);
+    });
+
 }
 
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)

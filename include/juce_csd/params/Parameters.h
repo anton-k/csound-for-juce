@@ -314,6 +314,9 @@ class Parameters {
     /// Set audio parameters to Csound and read sensor parameters from Csound
     void update_on_process(juce::AudioPlayHead* play_head);
 
+    /// Performs krate smoothing of float audio parameters
+    void update_krate_params(int ksmps);
+
     /// Serializes the parameters to JSON. Only audio and UI parameters are persisted
     void getStateInformation (juce::MemoryBlock& destData);
 
@@ -361,7 +364,6 @@ class Parameters {
     void update_discrete_audio_params();
     void update_sensor_params();
     void update_host_params(juce::AudioPlayHead* play_head);
-    void update_krate_params(int ksmps);
 
     AudioParameterList audio_parameters;
     UiParameterList ui_parameters;
