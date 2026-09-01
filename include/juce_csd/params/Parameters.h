@@ -165,6 +165,21 @@ using HostParameterList = std::vector<HostParameterSpec>;
 
 /// Parameter specification. It lists all parameters for the application.
 struct ParameterSpec {
+  // TODO: version alone is not enough. We need to implement migrations.
+  //
+  // sketch for migrations:
+  //
+  // Migrations = [MigrationDiff]
+  //
+  // MigrationDiff
+  //    = MoveField { new_name: String, old_name: String, new_type: AudioParamterType, old_type: AudioParameterType }
+  //    | RemapFloat { old_range: (min, max), new_range: (min_max) }
+  //    | RemapChoice { [(old_index, new_index)] }
+  //
+  //  In ParameterSpec we can provide list of migrations to update json file from previous version:
+  //
+  //  migrations: [(Version, Migrations)]
+  //
   int version{0};
   std::vector<AudioParameterFloatSpec> audio_floats{}; ///< float audio parameters
   std::vector<AudioParameterBoolSpec> audio_bools{}; ///< boolean audio parameters
