@@ -384,7 +384,10 @@ Also we define scaling factor for audio amplitudes:
 
 Next we define paramneters for our plugin. We communicate with cpp JUCE code over Csound API with
 control channels. We define control channels for all parameters. Note that parameter id should
-be the same as the name of the control channel in the Csound code:
+be the same as the name of the control channel in the Csound code, also it is important
+to set second argument of `chn_k` to `1` for audio parameters. Setting it to 1
+marks this channel as input channel, it's important to distinguish input and output channels
+and set them properly otherwise parameters would not be updated from host or UI:
 
 ```csound
 chn_k "size", 1, 2, 0.6, 0, 1

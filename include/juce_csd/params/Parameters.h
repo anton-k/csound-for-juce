@@ -192,8 +192,6 @@ struct CachedInputParam {
     CsoundChannelPtr channel_ptr{nullptr};
 
     CachedInputParam(Csound* csound, const std::string& id_): id(id_) {
-      // TODO: for sensor channels we should use CSOUND_OUTPUT_CHANNEL
-      // and for host params we should use CSOUND_INPUT_CHANNEL
         int status = csound->GetChannelPtr(channel_ptr, id.c_str(), CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL);
         if (status != 0) {
           channel_ptr = nullptr;
