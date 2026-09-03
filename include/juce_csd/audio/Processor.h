@@ -63,6 +63,8 @@ class Processor {
     void log(csd_plugin::LogLevel level, const char* text);
 
     std::unique_ptr<CsoundLogConsumer> create_log_consumer();
+    bool is_csound_valid() const { return csound.is_csound_valid(); }
+    std::string get_last_error() const { return csound.get_last_error(); }
 
   private:
     void read_midi_from_host(juce::MidiBuffer&);
@@ -80,7 +82,6 @@ class Processor {
 
     // 2. The queue manager (manages indices, prevents false sharing)
     LockFreeSpscQueue<LogMessage> log_queue;
-
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Processor)
 };

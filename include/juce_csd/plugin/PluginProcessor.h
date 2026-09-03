@@ -60,6 +60,7 @@ public:
         return csound.create_log_consumer();
     }
 
+    juce_csd::Processor& get_csound_processor() { return csound; }
 private:
     static juce::AudioProcessor::BusesProperties make_buses_properties(const csd_plugin::IOLayout& io_layout);
     Processor csound;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <csound/csound.hpp>
 #include <memory>
@@ -193,7 +194,38 @@ class Processor {
       }
     }
 
+    bool is_csound_valid() const {
+        return ready_to_play.load(std::memory_order_acquire);
+    }
+
+    // Called by UI thread. Allocates a std::string for JUCE, which is safe.
+    std::string get_last_error() const {
+        if (!has_error_.load(std::memory_order_acquire)) {
+            return "";
+        }
+        return std::string(last_error_buffer_);
+    }
+
+    // 100% RT-Safe setter. No allocations, no mutexes.
+    void set_last_error(const char* msg) {
+        if (!msg) return;
+        size_t i = 0;
+        // Manual bounded copy to avoid strncpy's zero-padding overhead
+        for (; i < sizeof(last_error_buffer_) - 1 && msg[i] != '\0'; ++i) {
+            last_error_buffer_[i] = msg[i];
+        }
+        last_error_buffer_[i] = '\0';
+        has_error_.store(true, std::memory_order_release);
+    }
+
+    void clear_last_error() {
+        has_error_.store(false, std::memory_order_release);
+    }
+
+
   private:
+    bool csound_is_valid{false};
+
     void csound_process(int block_size);
     int get_csound_cycle_size(int block_size);
     void set_csound_midi_callbacks();
@@ -217,7 +249,7 @@ class Processor {
     int csound_cycle_size{0};
     int current_sample{0};
     std::string csd_file_content;
-    bool ready_to_play{false};
+    std::atomic<bool> ready_to_play{false};
     IOLayout io_layout;
     int current_cycle_end_sample{0};
 
@@ -229,7 +261,8 @@ class Processor {
     LogCallback log_callback;
     bool is_compiling{false};
     std::string compilation_log_buffer;
-
+    char last_error_buffer_[4096] = {0};
+    std::atomic<bool> has_error_{false};
 };
 
 }

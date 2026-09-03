@@ -170,28 +170,18 @@ void Processor::setup_csound(int sample_rate) {
     }
 
     is_compiling = false;
+
     if (compile_result != 0 || start_result != 0) {
-        // CRITICAL FIX: Leak the corrupted instance and replace with an EMPTY instance.
-        // DO NOT compile or start the dummy instance. An unstarted Csound object
-        // spawns no background threads and is perfectly safe to destroy.
-        csound->SetHostData(nullptr);
-        csound.release();
+        // FAILURE: Copy the main-thread string into the RT-safe buffer
+        set_last_error(compilation_log_buffer.c_str());
 
-        csound = std::unique_ptr<Csound>(new Csound());
-        csound->SetHostData(this);
-        csound->SetMessageCallback(csound_message_callback);
-
-        if (!compilation_log_buffer.empty()) {
-            log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
-        } else {
-            log(csd_plugin::LogLevel::Error, "Csound compilation or start failed. DSP disabled.");
-        }
-
+        log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
         ready_to_play = false;
         return;
     }
 
-
+    // SUCCESS: Clear any previous errors
+    clear_last_error();
     ready_to_play = true;
 }
 
@@ -330,48 +320,35 @@ int Processor::get_current_sample() {
     return current_sample;
 }
 
-void Processor::csound_message_callback(CSOUND* csound, int attr, const char* format, va_list
-val)
+void Processor::csound_message_callback(CSOUND* csound, int attr, const char* format, va_list val)
 {
     char buffer[2048];
     vsnprintf(buffer, sizeof(buffer), format, val);
 
-    // DEBUG: Check your IDE/Terminal console for this output!
-    DBG("Csound raw attr: " << attr << " | Text: " << buffer);
-
-    // CORRECT MASK: Csound stores the message type in the lowest 3 bits (0x7).
     int type = attr & 0x7;
-
     csd_plugin::LogLevel level = csd_plugin::LogLevel::Info;
-
-    // 1 = CSOUNDMSG_ERROR
-    if (type == 1) {
-        level = csd_plugin::LogLevel::Error;
-    }
-    // 2 = CSOUNDMSG_WARNING
-    else if (type == 2) {
-        level = csd_plugin::LogLevel::Warning;
-    }
-    // 0 = Default, 3 = Orch, 4 = Realtime (printk) -> All fall through to Info
+    if (type == 1) level = csd_plugin::LogLevel::Error;
+    else if (type == 2) level = csd_plugin::LogLevel::Warning;
 
     auto* processor = static_cast<csd_plugin::Processor*>(csoundGetHostData(csound));
+    if (!processor) return;
 
-    // If we are currently compiling, buffer the message and exit early
-    if (processor) {
-        if (processor->is_compiling) {
+    if (processor->is_compiling) {
+        // MAIN THREAD ONLY: Safe to use std::string concatenation
         std::string msg(buffer);
-
-            // Skip empty messages or messages that are just a single newline
-            if (!msg.empty() && msg != "\n") {
-                processor->compilation_log_buffer += msg;
-
-                // Only append a newline if the message doesn't already end with one
-                if (msg.back() != '\n') {
-                    processor->compilation_log_buffer += '\n';
-                }
+        if (!msg.empty() && msg != "\n") {
+            processor->compilation_log_buffer += msg;
+            if (msg.back() != '\n') {
+                processor->compilation_log_buffer += '\n';
             }
-        } else {
-            processor->log(level, buffer);
+        }
+    } else {
+        // AUDIO THREAD: 100% RT-safe logging
+        processor->log(level, buffer);
+
+        // If a runtime error occurs, capture it without allocation
+        if (level == csd_plugin::LogLevel::Error) {
+            processor->set_last_error(buffer);
         }
     }
 }

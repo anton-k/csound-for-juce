@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "juce_audio_processors/juce_audio_processors.h"
+#include "juce_csd/plugin/PluginProcessor.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <juce_csd/params/Parameters.h>
 #include <juce_csd/ui/ErrorBanner.h>
@@ -11,7 +12,7 @@
 class AudioPluginAudioProcessorEditor final : public juce::AudioProcessorEditor
 {
 public:
-    explicit AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor&);
+    explicit AudioPluginAudioProcessorEditor (juce_csd::PluginProcessor&);
     ~AudioPluginAudioProcessorEditor() override;
 
     //==============================================================================
@@ -25,7 +26,7 @@ private:
     void setup_logger();
     void setup_parameter_attachments();
 
-    AudioPluginAudioProcessor& processorRef;
+    juce_csd::PluginProcessor& processorRef;
     juce::Slider size_knob, tone_knob, mix_knob;
     juce::ComboBox reverb_type_selector;
     juce::Label size_label, tone_label, mix_label;

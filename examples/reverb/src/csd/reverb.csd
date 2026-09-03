@@ -29,7 +29,7 @@ printk2 kmix
 ainL, ainR  inch 1, 2
 awetL, awetR  reverbsc ainL, ainR, kfeedback, 20000 * kcutOff
 kReverbGain = 2
-aoutLL = (1 - kmix) * ainL + kmix * (kReverbGain * awetL)
+aoutL = (1 - kmix) * ainL + kmix * (kReverbGain * awetL)
 aoutR = (1 - kmix) * ainR + kmix * (kReverbGain * awetR)
 outs aoutL, aoutR
 endin

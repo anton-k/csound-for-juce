@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "juce_csd/ui/ErrorBanner.h"
 #include "juce_graphics/juce_graphics.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "PluginEditor.h"
@@ -10,9 +11,9 @@
 using namespace juce_csd;
 
 //==============================================================================
-AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& p)
+AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (juce_csd::PluginProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p), font(juce::FontOptions(24.0)), parameter_attachments(p.get_parameters()),
-    constrainer(new juce::ComponentBoundsConstrainer())
+    constrainer(new juce::ComponentBoundsConstrainer()), error_banner(p.get_csound_processor())
 {
     setup_knobs();
     setup_reverb_type_choice();

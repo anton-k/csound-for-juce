@@ -1,13 +1,12 @@
-
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <algorithm>
+#include "juce_csd/audio/Processor.h" // Include to access Processor
 
 namespace juce_csd {
 
 class ErrorBanner : public juce::Component, private juce::Button::Listener {
 public:
-    ErrorBanner() {
+    explicit ErrorBanner(Processor& processor) : processorRef(processor) {
         // Setup the scrollable log display
         logDisplay.setMultiLine(true);
         logDisplay.setReadOnly(true);
@@ -15,25 +14,30 @@ public:
         logDisplay.setCaretVisible(false);
         logDisplay.setPopupMenuEnabled(false);
 
-        logDisplay.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 16.0f, juce::Font::plain));
-
+        logDisplay.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 18.0f, juce::Font::plain));
         logDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.9f));
         logDisplay.setColour(juce::TextEditor::textColourId, juce::Colours::white);
         logDisplay.setColour(juce::TextEditor::outlineColourId, juce::Colours::darkred);
         addAndMakeVisible(logDisplay);
 
         // Setup close button
+        closeButton.setButtonText("X");
         closeButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkred);
         closeButton.onClick = [this]() { setVisible(false); };
         addAndMakeVisible(closeButton);
 
         setVisible(false); // Hidden by default
+
+        // Check immediately in case it's added to a parent later
+        checkAndShow();
     }
 
     void addError(const juce::String& message) {
-        // Prevent UI hangs by limiting the maximum number of characters.
-        // juce::TextEditor layout performance degrades significantly with large text blocks.
-       juce::String safeMessage = message;
+        juce::String safeMessage = message.trim();
+        if (safeMessage.isEmpty()) {
+            return;
+        }
+
         if (safeMessage.length() > 2000) {
             safeMessage = safeMessage.substring(0, 2000) + "\n... [Log truncated to prevent UI freeze] ...";
         }
@@ -49,7 +53,6 @@ public:
         setVisible(true);
         updateBounds();
 
-        // Force layout and repaint so it shows up immediately
         if (auto* parent = getParentComponent()) {
             parent->repaint();
         }
@@ -72,26 +75,37 @@ public:
         logDisplay.setBounds(bounds.reduced(4));
     }
 
-    // Automatically resize when the parent window resizes
     void parentSizeChanged() override {
         updateBounds();
     }
 
-    // Ensure bounds are correct when first attached to a parent
+    // Ensure bounds are correct and state is checked when attached to a parent
     void parentHierarchyChanged() override {
         updateBounds();
+        checkAndShow();
     }
 
 private:
+    Processor& processorRef;
     juce::TextEditor logDisplay;
-    juce::TextButton closeButton {"X"};
+    juce::TextButton closeButton;
+
+    void checkAndShow() {
+        if (!processorRef.is_csound_valid()) {
+            juce::String errorMsg = processorRef.get_last_error();
+
+            // Only trigger the banner if an actual error was captured
+            if (errorMsg.trim().isNotEmpty()) {
+                addError(errorMsg);
+                return;
+            }
+        }
+        setVisible(false);
+    }
 
     void updateBounds() {
         if (auto* parent = getParentComponent()) {
-            auto parentBounds = parent->getLocalBounds();
-            // Occupy 25% of the parent window's height, with a minimum of 100 pixels
-            int bannerHeight = std::max(100, parentBounds.getHeight() / 4);
-            setBounds(parentBounds.removeFromTop(bannerHeight));
+            setBounds(parent->getLocalBounds());
         }
     }
 
