@@ -225,7 +225,11 @@ class Processor {
     int current_sample_rate{0};
     int current_max_block_size{0};
     std::function<void()> krate_callback;
+
     LogCallback log_callback;
+    bool is_compiling{false};
+    std::string compilation_log_buffer;
+
 };
 
 }

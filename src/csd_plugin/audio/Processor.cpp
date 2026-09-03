@@ -149,7 +149,6 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
     return 0;
 }
 
-
 void Processor::setup_csound(int sample_rate) {
     csound = std::unique_ptr<Csound>(new Csound());
 
@@ -158,13 +157,26 @@ void Processor::setup_csound(int sample_rate) {
     csound->SetMessageCallback(csound_message_callback);
 
     set_csound_midi_callbacks();
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0", static_cast<int>(sample_rate));
     csound->SetOption(options.c_str());
+
+    is_compiling = true;
+    compilation_log_buffer.clear();
+
     int compile_result = csound->CompileCSD(csd_file_content.c_str(), 1);
     int start_result = csound->Start();
+
+    is_compiling = false;
+
     if (compile_result != 0 || start_result != 0) {
-        log(csd_plugin::LogLevel::Error, "Csound compilation or start failed. DSP disabled.");
-        ready_to_play = false; // CRITICAL: Prevents audio thread from calling PerformKsmps
+        // Flush the captured compilation log as an Error
+        if (!compilation_log_buffer.empty()) {
+            log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
+        } else {
+            log(csd_plugin::LogLevel::Error, "Csound compilation or start failed. DSP disabled.");
+        }
+
+        ready_to_play = false;
         return;
     }
 
@@ -325,8 +337,24 @@ val)
     // 0 = Default, 3 = Orch, 4 = Realtime (printk) -> All fall through to Info
 
     auto* processor = static_cast<csd_plugin::Processor*>(csoundGetHostData(csound));
+
+    // If we are currently compiling, buffer the message and exit early
     if (processor) {
-        processor->log(level, buffer);
+        if (processor->is_compiling) {
+        std::string msg(buffer);
+
+            // Skip empty messages or messages that are just a single newline
+            if (!msg.empty() && msg != "\n") {
+                processor->compilation_log_buffer += msg;
+
+                // Only append a newline if the message doesn't already end with one
+                if (msg.back() != '\n') {
+                    processor->compilation_log_buffer += '\n';
+                }
+            }
+        } else {
+            processor->log(level, buffer);
+        }
     }
 }
 

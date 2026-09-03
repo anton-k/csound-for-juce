@@ -216,6 +216,7 @@ void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_r
     // Cache float parameters
     for (auto& [id, param] : audio_parameters.floats) {
         param.set_sample_rate(static_cast<float>(sample_rate));
+        param.set_target(param.param->get(), true);
         if (param.type == ParameterType::Continuous) {
           cached_smoothed_audio_parameters.push_back(SmoothedAudioParam(csound, id, &param));
         } else {
@@ -429,11 +430,8 @@ void Parameters::update_krate_params(int ksmps) {
     int step_size = ksmps * krate_divider;
 
     for (auto& smooth_param : cached_smoothed_audio_parameters) {
-        // Only do the math if the parameter is actively ramping
-        if (smooth_param.param->samples_remaining > 0) {
-            float value_to_send = smooth_param.param->process(step_size);
-            smooth_param.cached.set_value(static_cast<double>(value_to_send));
-        }
+        float value_to_send = smooth_param.param->process(step_size);
+        smooth_param.cached.set_value(static_cast<double>(value_to_send));
     }
 }
 
