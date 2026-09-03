@@ -1,5 +1,7 @@
+
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <algorithm>
 
 namespace juce_csd {
 
@@ -12,11 +14,11 @@ public:
         logDisplay.setScrollbarsShown(true);
         logDisplay.setCaretVisible(false);
         logDisplay.setPopupMenuEnabled(false);
-        logDisplay.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(),
-14.0f, juce::Font::plain));
-        logDisplay.setColour(juce::TextEditor::backgroundColourId,
-juce::Colours::black.withAlpha(0.9f));
-        logDisplay.setColour(juce::TextEditor::textColourId, juce::Colours::red);
+
+        logDisplay.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 16.0f, juce::Font::plain));
+
+        logDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.9f));
+        logDisplay.setColour(juce::TextEditor::textColourId, juce::Colours::white);
         logDisplay.setColour(juce::TextEditor::outlineColourId, juce::Colours::darkred);
         addAndMakeVisible(logDisplay);
 
@@ -29,17 +31,24 @@ juce::Colours::black.withAlpha(0.9f));
     }
 
     void addError(const juce::String& message) {
+        // Prevent UI hangs by limiting the maximum number of characters.
+        // juce::TextEditor layout performance degrades significantly with large text blocks.
+        auto currentText = logDisplay.getText();
+        if (currentText.length() > 8000) {
+            logDisplay.setText(currentText.substring(currentText.length() - 6000));
+        }
+
         logDisplay.moveCaretToEnd();
         logDisplay.insertTextAtCaret(message + "\n");
+
         setVisible(true);
+        updateBounds();
 
         // Force layout and repaint so it shows up immediately
         if (auto* parent = getParentComponent()) {
-            setBounds(parent->getLocalBounds().removeFromTop(150));
             parent->repaint();
         }
     }
-
 
     void clear() {
         logDisplay.clear();
@@ -58,9 +67,28 @@ juce::Colours::black.withAlpha(0.9f));
         logDisplay.setBounds(bounds.reduced(4));
     }
 
+    // Automatically resize when the parent window resizes
+    void parentSizeChanged() override {
+        updateBounds();
+    }
+
+    // Ensure bounds are correct when first attached to a parent
+    void parentHierarchyChanged() override {
+        updateBounds();
+    }
+
 private:
     juce::TextEditor logDisplay;
     juce::TextButton closeButton {"X"};
+
+    void updateBounds() {
+        if (auto* parent = getParentComponent()) {
+            auto parentBounds = parent->getLocalBounds();
+            // Occupy 25% of the parent window's height, with a minimum of 100 pixels
+            int bannerHeight = std::max(100, parentBounds.getHeight() / 4);
+            setBounds(parentBounds.removeFromTop(bannerHeight));
+        }
+    }
 
     void buttonClicked(juce::Button*) override { setVisible(false); }
 };

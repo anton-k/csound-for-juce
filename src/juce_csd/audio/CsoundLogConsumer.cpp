@@ -9,6 +9,7 @@ CsoundLogConsumer::CsoundLogConsumer(Processor& processor)
 
 CsoundLogConsumer::~CsoundLogConsumer() {
     stop_consuming();
+    uiCallback = nullptr;
     disable_file_logging();
 }
 
