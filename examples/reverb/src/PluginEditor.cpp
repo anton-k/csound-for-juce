@@ -14,7 +14,25 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     : AudioProcessorEditor (&p), processorRef (p), font(juce::FontOptions(24.0)), parameter_attachments(p.get_parameters()),
     constrainer(new juce::ComponentBoundsConstrainer())
 {
-    // Inits knobs to control float audio parameters
+    setup_knobs();
+    setup_reverb_type_choice();
+    setup_window();
+    setup_parameter_attachments();
+    setup_logger();
+}
+
+// Choice parameter definition. Note that parameter index is 1-based. Because 0 is
+// reserved in the JUCE for "no selection".
+void AudioPluginAudioProcessorEditor::setup_reverb_type_choice() {
+    reverb_type_selector.addItem("Sean Costello", 1);
+    reverb_type_selector.addItem("Freeverb", 2);
+    reverb_type_selector.addItem("Nverb", 3);
+    addAndMakeVisible(reverb_type_selector);
+
+}
+
+// Inits knobs to control float audio parameters
+void AudioPluginAudioProcessorEditor::setup_knobs() {
     for (auto* knob : {&size_knob, &tone_knob, &mix_knob}) {
         knob->setSliderStyle(juce::Slider::Rotary);
         knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -23,14 +41,6 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         addAndMakeVisible(knob);
     }
-
-    // Choice parameter definition. Note that parameter index is 1-based. Because 0 is
-    // reserved in the JUCE for "no selection".
-    reverb_type_selector.addItem("Sean Costello", 1);
-    reverb_type_selector.addItem("Freeverb", 2);
-    reverb_type_selector.addItem("Nverb", 3);
-    addAndMakeVisible(reverb_type_selector);
-
     /// Labels for the knobs
     size_label.setText(names::size, juce::NotificationType::dontSendNotification);
     tone_label.setText(names::tone, juce::NotificationType::dontSendNotification);
@@ -40,8 +50,10 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         label->setFont(font);
         addAndMakeVisible(label);
     }
+}
 
     /// Setup height and width fir the UI window (those params are persisted in the plugin state)
+void AudioPluginAudioProcessorEditor::setup_window() {
     int window_height = static_cast<int>(processorRef.get_parameters().get_ui_parameter(names::window_height).value_or(250.0));
     int window_width = static_cast<int>(processorRef.get_parameters().get_ui_parameter(names::window_width).value_or(400.0));
     setSize (window_width, window_height);
@@ -52,14 +64,17 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     constrainer->setMinimumHeight(100);
     constrainer->setMinimumWidth(200);
     setConstrainer(constrainer.get());
+}
 
-    /// Setup parameter attachments. It links UI-control to the update of Csound parameters
+/// Setup parameter attachments. It links UI-control to the update of Csound parameters
+void AudioPluginAudioProcessorEditor::setup_parameter_attachments() {
     parameter_attachments.add_slider(names::size, size_knob);
     parameter_attachments.add_slider(names::tone, tone_knob);
     parameter_attachments.add_slider(names::mix, mix_knob);
     parameter_attachments.add_combo_box(names::reverb_type, reverb_type_selector);
+}
 
-
+void AudioPluginAudioProcessorEditor::setup_logger() {
     log_consumer = processorRef.create_log_consumer();
     auto log_dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                       .getChildFile("MyPluginLogs");

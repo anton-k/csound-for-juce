@@ -20,6 +20,12 @@ public:
     void resized() override;
 
 private:
+    void setup_window();
+    void setup_knobs();
+    void setup_reverb_type_choice();
+    void setup_logger();
+    void setup_parameter_attachments();
+
     AudioPluginAudioProcessor& processorRef;
     juce::Slider size_knob, tone_knob, mix_knob;
     juce::ComboBox reverb_type_selector;
