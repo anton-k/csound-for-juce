@@ -159,8 +159,16 @@ void Processor::setup_csound(int sample_rate) {
 
     set_csound_midi_callbacks();
     std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0", static_cast<int>(sample_rate));
-    csound->SetOption(options.c_str());    csound->CompileCSD(csd_file_content.c_str(), 1);
-    csound->Start();
+    csound->SetOption(options.c_str());
+    int compile_result = csound->CompileCSD(csd_file_content.c_str(), 1);
+    int start_result = csound->Start();
+    if (compile_result != 0 || start_result != 0) {
+        log(csd_plugin::LogLevel::Error, "Csound compilation or start failed. DSP disabled.");
+        ready_to_play = false; // CRITICAL: Prevents audio thread from calling PerformKsmps
+        return;
+    }
+
+    ready_to_play = true;
 }
 
 void Processor::prepare_to_play(int sample_rate, int max_block_size) {

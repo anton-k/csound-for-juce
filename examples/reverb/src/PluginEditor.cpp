@@ -81,18 +81,13 @@ void AudioPluginAudioProcessorEditor::setup_logger() {
     log_dir.createDirectory();
     log_consumer->enable_file_logging(log_dir.getChildFile("csound_log.txt"), "Plugin Started");
 
-    // 2. Register UI callback for error banners
+    addAndMakeVisible(error_banner);
+    error_banner.toFront(false); // Keep it above other components
+
+    // Update the log consumer callback:
     log_consumer->set_ui_callback([this](const juce::String& msg, csd_plugin::LogLevel level) {
-        if (level == csd_plugin::LogLevel::Error && !error_popup_shown) {
-            error_popup_shown = true;
-            // Show a non-blocking async popup on the main thread
-            juce::AlertWindow::showMessageBoxAsync(
-                juce::AlertWindow::WarningIcon,
-                "Csound Compilation Error",
-                "Failed to compile or run the Csound file:\n\n" + msg,
-                "OK",
-                this // Associate with this editor window
-            );
+        if (level == csd_plugin::LogLevel::Error) {
+            error_banner.addError(msg);
         }
     });
 

@@ -3,8 +3,8 @@
 #include "PluginProcessor.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
-#include <memory>
 #include <juce_csd/params/Parameters.h>
+#include <juce_csd/ui/ErrorBanner.h>
 
 using namespace juce_csd;
 
@@ -35,6 +35,7 @@ private:
     std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer;
     std::unique_ptr<juce_csd::CsoundLogConsumer> log_consumer;
     bool error_popup_shown = false;
+    juce_csd::ErrorBanner error_banner;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };
