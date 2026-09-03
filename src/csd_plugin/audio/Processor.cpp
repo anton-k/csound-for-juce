@@ -158,7 +158,7 @@ void Processor::setup_csound(int sample_rate) {
     csound->SetMessageCallback(csound_message_callback);
 
     set_csound_midi_callbacks();
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0", static_cast<int>(sample_rate));
     csound->SetOption(options.c_str());    csound->CompileCSD(csd_file_content.c_str(), 1);
     csound->Start();
 }

@@ -83,11 +83,16 @@ void AudioPluginAudioProcessorEditor::setup_logger() {
 
     // 2. Register UI callback for error banners
     log_consumer->set_ui_callback([this](const juce::String& msg, csd_plugin::LogLevel level) {
-        juce::ignoreUnused(msg);
-        juce::ignoreUnused(this);
-        if (level == csd_plugin::LogLevel::Error) {
-            // e.g., errorBanner.setVisible(true);
-            // errorLabel.setText(msg, juce::dontSendNotification);
+        if (level == csd_plugin::LogLevel::Error && !error_popup_shown) {
+            error_popup_shown = true;
+            // Show a non-blocking async popup on the main thread
+            juce::AlertWindow::showMessageBoxAsync(
+                juce::AlertWindow::WarningIcon,
+                "Csound Compilation Error",
+                "Failed to compile or run the Csound file:\n\n" + msg,
+                "OK",
+                this // Associate with this editor window
+            );
         }
     });
 
