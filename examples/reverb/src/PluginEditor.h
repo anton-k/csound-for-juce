@@ -27,6 +27,7 @@ private:
     juce::Font font;
     juce_csd::ParameterAttachments parameter_attachments;
     std::unique_ptr<juce::ComponentBoundsConstrainer> constrainer;
+    std::unique_ptr<juce_csd::CsoundLogConsumer> log_consumer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

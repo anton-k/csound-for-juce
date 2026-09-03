@@ -4,10 +4,12 @@
 #include "csd_plugin/audio/Logger.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_csd/audio/Processor.h>
+#include <juce_csd/audio/CsoundLogConsumer.h>
 #include <csound/csound.h>
 #include <csound/csound.hpp>
 #include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
 
 namespace juce_csd {
 
@@ -19,6 +21,7 @@ Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLa
         msg.level = level;
         std::strncpy(msg.text, text, sizeof(msg.text) - 1);
         msg.text[sizeof(msg.text) - 1] = '\0';
+        msg.source = LogSource::Csound;
 
         // RT-SAFE PUSH: try_write returns 0 if the queue is full (drops message)
         auto size = log_queue.try_write(1, [&](auto block1, auto block2) {
@@ -189,4 +192,19 @@ bool Processor::pop_log(LogMessage& msg) {
     return read_count > 0;
 }
 
+std::unique_ptr<CsoundLogConsumer> Processor::create_log_consumer() {
+    return std::unique_ptr<CsoundLogConsumer>(new CsoundLogConsumer(*this));
+}
+
+void Processor::log(csd_plugin::LogLevel level, const char* text) {
+    LogMessage msg;
+    msg.level = level;
+    msg.source = LogSource::Custom; // <-- Tagged
+    std::strncpy(msg.text, text, sizeof(msg.text) - 1);
+    msg.text[sizeof(msg.text) - 1] = '\0';
+
+    auto size = log_queue.try_write(1, [&](auto block1, auto block2) {
+        if (!block1.empty()) block1[0] = msg; else block2[0] = msg;
+    });
+}
 }

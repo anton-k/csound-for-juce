@@ -2,11 +2,13 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.hpp>
+#include <memory>
 #include <sys/types.h>
 #include "csd_plugin/audio/Processor.h"
 #include "juce_audio_basics/juce_audio_basics.h"
 #include <juce_csd/params/Parameters.h>
 #include <juce_csd/audio/Processor.h>
+#include <juce_csd/audio/CsoundLogConsumer.h>
 
 namespace juce_csd {
 
@@ -48,6 +50,16 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     Parameters& get_parameters() { return csound.get_parameters(); };
+
+    /// Expose custom logging to the plugin developer
+    void log(csd_plugin::LogLevel level, const char* text) {
+        csound.log(level, text);
+    }
+
+    std::unique_ptr<juce_csd::CsoundLogConsumer> create_log_consumer() {
+        return csound.create_log_consumer();
+    }
+
 private:
     static juce::AudioProcessor::BusesProperties make_buses_properties(const csd_plugin::IOLayout& io_layout);
     Processor csound;

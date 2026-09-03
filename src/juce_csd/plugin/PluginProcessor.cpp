@@ -7,6 +7,7 @@
 #include "juce_core/juce_core.h"
 #include <juce_csd/params/Parameters.h>
 #include <juce_csd/audio/Processor.h>
+#include <juce_csd/audio/CsoundLogConsumer.h>
 #include <csd_plugin/audio/Processor.h>
 
 namespace juce_csd {

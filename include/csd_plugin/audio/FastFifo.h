@@ -20,10 +20,11 @@ public:
 
     void reset(int capacity) {
         size_ = 1;
-        while (size_ < capacity) size_ <<= 1; // Power of 2
+        uint32_t cap = static_cast<uint32_t>(capacity);
+        while (size_ < cap) size_ <<= 1; // Power of 2
         mask_ = size_ - 1;
 
-        buffer_.resize(size_);
+        buffer_.resize(static_cast<size_t>(size_));
         read_pos_ = 0;
         write_pos_ = 0;
     }
@@ -31,75 +32,81 @@ public:
     // --- Single Item Operations ---
 
     bool push(const T& item) {
-        if (get_size() >= size_) return false; // Prevent overwrite
+        if (write_pos_ - read_pos_ >= size_) return false; // Prevent overwrite
         buffer_[write_pos_ & mask_] = item;
         ++write_pos_;
         return true;
     }
 
     bool read(T& dest) {
-        if (get_size() == 0) return false;
+        if (write_pos_ == read_pos_) return false;
         dest = buffer_[read_pos_ & mask_];
         ++read_pos_;
         return true;
     }
 
     T* peek() {
-        if (get_size() == 0) return nullptr;
+        if (write_pos_ == read_pos_) return nullptr;
         return &buffer_[read_pos_ & mask_];
     }
 
     void pop() {
-        if (get_size() > 0) ++read_pos_;
+        if (write_pos_ != read_pos_) ++read_pos_;
     }
 
     // --- Block Operations ---
 
     bool write_block(const T* data, int num_items) {
-        if (get_size() + num_items > size_) return false; // Not enough space
+        if (num_items <= 0) return true;
+        uint32_t n = static_cast<uint32_t>(num_items);
+        if (write_pos_ - read_pos_ + n > size_) return false; // Not enough space
 
         uint32_t write_idx = write_pos_ & mask_;
         uint32_t space_until_end = size_ - write_idx;
 
-        if (space_until_end >= num_items) {
-            std::memcpy(&buffer_[write_idx], data, num_items * sizeof(T));
+        if (space_until_end >= n) {
+            std::memcpy(&buffer_[write_idx], data, static_cast<size_t>(n) * sizeof(T));
         } else {
-            std::memcpy(&buffer_[write_idx], data, space_until_end * sizeof(T));
-            std::memcpy(&buffer_[0], data + space_until_end, (num_items - space_until_end) * sizeof(T));
+            std::memcpy(&buffer_[write_idx], data, static_cast<size_t>(space_until_end) *
+sizeof(T));
+            std::memcpy(&buffer_[0], data + space_until_end, static_cast<size_t>(n -
+space_until_end) * sizeof(T));
         }
-        write_pos_ += num_items;
+        write_pos_ += n;
         return true;
     }
 
     bool read_block(T* dest, int num_items) {
-        if (get_size() < num_items) return false; // Not enough data
+        if (num_items <= 0) return true;
+        uint32_t n = static_cast<uint32_t>(num_items);
+        if (write_pos_ - read_pos_ < n) return false; // Not enough data
 
         uint32_t read_idx = read_pos_ & mask_;
         uint32_t space_until_end = size_ - read_idx;
 
-        if (space_until_end >= num_items) {
-            std::memcpy(dest, &buffer_[read_idx], num_items * sizeof(T));
+        if (space_until_end >= n) {
+            std::memcpy(dest, &buffer_[read_idx], static_cast<size_t>(n) * sizeof(T));
         } else {
-            std::memcpy(dest, &buffer_[read_idx], space_until_end * sizeof(T));
-            std::memcpy(dest + space_until_end, &buffer_[0], (num_items - space_until_end) * sizeof(T));
+            std::memcpy(dest, &buffer_[read_idx], static_cast<size_t>(space_until_end) * sizeof(T));
+            std::memcpy(dest + space_until_end, &buffer_[0], static_cast<size_t>(n -
+space_until_end) * sizeof(T));
         }
-        read_pos_ += num_items;
+        read_pos_ += n;
         return true;
     }
 
     // --- State ---
 
     int get_size() const { return static_cast<int>(write_pos_ - read_pos_); }
-    int get_capacity() const { return size_; }
+    int get_capacity() const { return static_cast<int>(size_); }
     void clear() { read_pos_ = write_pos_ = 0; }
 
 private:
     std::vector<T> buffer_;
-    int size_ = 0;
+    uint32_t size_ = 0;
     uint32_t mask_ = 0;
     uint32_t read_pos_ = 0;
     uint32_t write_pos_ = 0;
 };
 
 } // namespace csd_plugin
-

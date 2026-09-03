@@ -1,7 +1,7 @@
 #pragma once
 
 #include "csd_plugin/audio/Processor.h"
-#include "juce_csd/plugin/PluginProcessor.h"
+#include <juce_csd/plugin/PluginProcessor.h>
 #include "const.h"
 #include "EmbeddedCsd.h"
 

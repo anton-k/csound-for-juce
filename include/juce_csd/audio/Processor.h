@@ -11,15 +11,22 @@
 
 namespace juce_csd {
 
+enum class LogSource { Csound, Custom };
+
 struct LogMessage {
     csd_plugin::LogLevel level;
+    LogSource source;
     char text[512];
 };
+
+class CsoundLogConsumer;
 
 /// Class for the audio processor which runs the Csound.
 // Value of this class can be used to define all methods of the plugin which relies
 // on Csound audio processing.
 class Processor {
+  friend class CsoundLogConsumer;
+
   public:
     /// The processor is initialized with CSD file content, layout of IO-busses, specification of the parameters and reference to the JUCE audio processor class.
     Processor(const std::string& csd, const csd_plugin::IOLayout&, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor);
@@ -51,7 +58,11 @@ class Processor {
     /// Get IO-layout of the plugin
     const csd_plugin::IOLayout& get_io_layout() const;
 
-    bool pop_log(LogMessage& msg);
+    /// RT-safe custom logging for the plugin developer.
+    // Must pass a C-string (e.g., string literal or .toRawUTF8()) to avoid allocations.
+    void log(csd_plugin::LogLevel level, const char* text);
+
+    std::unique_ptr<CsoundLogConsumer> create_log_consumer();
 
   private:
     void read_midi_from_host(juce::MidiBuffer&);
@@ -59,6 +70,7 @@ class Processor {
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
     void update_parameters(juce::AudioPlayHead*);
+    bool pop_log(LogMessage& msg);
 
     csd_plugin::Processor csound;
     Parameters parameters;

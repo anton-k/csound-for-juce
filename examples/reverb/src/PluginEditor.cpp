@@ -3,7 +3,9 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "PluginEditor.h"
 #include "const.h"
+#include <juce_core/juce_core.h>
 #include <juce_csd/params/Parameters.h>
+#include <juce_csd/audio/CsoundLogConsumer.h>
 
 using namespace juce_csd;
 
@@ -56,10 +58,30 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     parameter_attachments.add_slider(names::tone, tone_knob);
     parameter_attachments.add_slider(names::mix, mix_knob);
     parameter_attachments.add_combo_box(names::reverb_type, reverb_type_selector);
+
+
+    log_consumer = processorRef.create_log_consumer();
+    auto log_dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                      .getChildFile("MyPluginLogs");
+    log_dir.createDirectory();
+    log_consumer->enable_file_logging(log_dir.getChildFile("csound_log.txt"), "Plugin Started");
+
+    // 2. Register UI callback for error banners
+    log_consumer->set_ui_callback([this](const juce::String& msg, csd_plugin::LogLevel level) {
+        juce::ignoreUnused(msg);
+        juce::ignoreUnused(this);
+        if (level == csd_plugin::LogLevel::Error) {
+            // e.g., errorBanner.setVisible(true);
+            // errorLabel.setText(msg, juce::dontSendNotification);
+        }
+    });
+
+    log_consumer->start_consuming(30);
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 {
+    log_consumer->stop_consuming();
 }
 
 //==============================================================================

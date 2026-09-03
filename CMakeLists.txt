@@ -41,6 +41,7 @@ target_sources(juce_csd PRIVATE
     src/juce_csd/params/JsonSerializer.cpp
     src/juce_csd/params/Parameters.cpp
     src/juce_csd/audio/Processor.cpp
+    src/juce_csd/audio/CsoundLogConsumer.cpp
     src/juce_csd/plugin/PluginProcessor.cpp
 )
 
@@ -76,11 +77,10 @@ target_link_libraries(juce_csd
         juce::juce_audio_basics
 
         nlohmann_json::nlohmann_json
+        spsc_queue
 
         # Kept PUBLIC so the final plugin automatically links Csound
         ${CSOUND_LIB}
-    PRIVATE
-        spsc_queue
 )
 
 target_compile_definitions(juce_csd PUBLIC
