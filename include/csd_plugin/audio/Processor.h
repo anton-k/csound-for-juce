@@ -7,6 +7,7 @@
 #include <vector>
 #include "AudioBuffer.h"
 #include "MidiBuffer.h"
+#include "csd_plugin/audio/Logger.h"
 
 namespace csd_plugin {
 
@@ -182,6 +183,15 @@ class Processor {
         krate_callback = std::move(callback);
     }
 
+    void set_log_callback(LogCallback callback) {
+        log_callback = std::move(callback);
+    }
+
+    void log(LogLevel level, const std::string& str) {
+      if (log_callback != nullptr) {
+        log_callback(level, str);
+      }
+    }
 
   private:
     void csound_process(int block_size);
@@ -196,6 +206,9 @@ class Processor {
     static int midi_write(CSOUND *csound_, void *userData, const unsigned char *midi_buffer, int midi_buffer_size);
     static int midi_device_open(CSOUND *csound_, void **user_data, const char *devName);
     static int midi_device_close(CSOUND *csound_, void *user_data);
+
+    // logger callback
+    static void csound_message_callback(CSOUND* csound, int attr, const char* format, va_list val);
 
     std::unique_ptr<Csound> csound;
     CsoundSettings csound_settings{};
@@ -212,6 +225,7 @@ class Processor {
     int current_sample_rate{0};
     int current_max_block_size{0};
     std::function<void()> krate_callback;
+    LogCallback log_callback;
 };
 
 }

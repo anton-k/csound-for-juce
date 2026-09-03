@@ -89,7 +89,6 @@ void Processor::set_host_io() {
 }
 
 void Processor::set_csound_midi_callbacks() {
-    csound->SetHostData(this);
     csound->SetExternalMidiInOpenCallback(&Processor::midi_device_open);
     csound->SetExternalMidiInCloseCallback(&Processor::midi_device_close);
     csound->SetExternalMidiReadCallback(&Processor::midi_read);
@@ -154,7 +153,10 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
 void Processor::setup_csound(int sample_rate) {
     csound = std::unique_ptr<Csound>(new Csound());
 
+    csound->SetHostData(this);
     set_host_io();
+    csound->SetMessageCallback(csound_message_callback);
+
     set_csound_midi_callbacks();
     std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
     csound->SetOption(options.c_str());    csound->CompileCSD(csd_file_content.c_str(), 1);
@@ -289,5 +291,21 @@ int Processor::get_csound_cycle_size(int block_size) {
 int Processor::get_current_sample() {
     return current_sample;
 }
+
+void Processor::csound_message_callback(CSOUND* csound, int attr, const char* format, va_list val)
+{
+    char buffer[2048];
+    vsnprintf(buffer, sizeof(buffer), format, val);
+
+    csd_plugin::LogLevel level = csd_plugin::LogLevel::Info;
+    if (attr & CSOUNDMSG_ERROR) level = csd_plugin::LogLevel::Error;
+    else if (attr & CSOUNDMSG_WARNING) level = csd_plugin::LogLevel::Warning;
+
+    auto* processor = static_cast<csd_plugin::Processor*>(csoundGetHostData(csound));
+    if (processor) {
+        processor->log(level, std::string(buffer));
+    }
+}
+
 
 }
