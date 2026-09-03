@@ -303,7 +303,7 @@ void Processor::csound_message_callback(CSOUND* csound, int attr, const char* fo
 
     auto* processor = static_cast<csd_plugin::Processor*>(csoundGetHostData(csound));
     if (processor) {
-        processor->log(level, std::string(buffer));
+        processor->log(level, buffer);
     }
 }
 

@@ -187,7 +187,7 @@ class Processor {
         log_callback = std::move(callback);
     }
 
-    void log(LogLevel level, const std::string& str) {
+    void log(LogLevel level, const char* str) {
       if (log_callback != nullptr) {
         log_callback(level, str);
       }

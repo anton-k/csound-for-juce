@@ -15,6 +15,7 @@ endif()
 include(cmake/CPM.cmake)
 
 CPMAddPackage("gh:catchorg/Catch2@3.5.2")
+CPMAddPackage("gh:joz-k/LockFreeSpscQueue@1.0.3")
 
 if(NOT TARGET juce::juce_audio_processors)
     CPMAddPackage("gh:juce-framework/JUCE#3af3ce009f6a02f6fa651008fffb5b41743a9fab")
@@ -58,7 +59,7 @@ target_include_directories(juce_csd
 # 4. Compile Features & Properties
 # ---------------------------------------------------------
 # Require C++20 and disable compiler-specific extensions
-target_compile_features(juce_csd PUBLIC cxx_std_20)
+target_compile_features(juce_csd PUBLIC cxx_std_23)
 set_target_properties(juce_csd PROPERTIES
     CXX_EXTENSIONS OFF
     # Crucial for Linux: Allows this static lib to be linked into a shared VST3 plugin
@@ -78,6 +79,8 @@ target_link_libraries(juce_csd
 
         # Kept PUBLIC so the final plugin automatically links Csound
         ${CSOUND_LIB}
+    PRIVATE
+        spsc_queue
 )
 
 target_compile_definitions(juce_csd PUBLIC

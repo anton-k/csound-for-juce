@@ -1,6 +1,7 @@
 
 #include "csd_plugin/audio/Processor.h"
 #include "csd_plugin/audio/MidiBuffer.h"
+#include "csd_plugin/audio/Logger.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_csd/audio/Processor.h>
 #include <csound/csound.h>
@@ -11,8 +12,25 @@
 namespace juce_csd {
 
 Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLayout& io_layout, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor):
-  csound(csd_file_content, io_layout), parameters(processor, parameter_spec)
- {}
+  csound(csd_file_content, io_layout), parameters(processor, parameter_spec), log_queue(log_buffer)
+ {
+    csound.set_log_callback([this](csd_plugin::LogLevel level, const char* text) {
+        LogMessage msg;
+        msg.level = level;
+        std::strncpy(msg.text, text, sizeof(msg.text) - 1);
+        msg.text[sizeof(msg.text) - 1] = '\0';
+
+        // RT-SAFE PUSH: try_write returns 0 if the queue is full (drops message)
+        auto size = log_queue.try_write(1, [&](auto block1, auto block2) {
+            // Since we only write 1 item, it will be in either block1 or block2
+            if (!block1.empty()) {
+                block1[0] = msg;
+            } else {
+                block2[0] = msg;
+            }
+        });
+    });
+}
 
 void Processor::prepareToPlay (double sample_rate, int max_block_size)
 {
@@ -158,4 +176,17 @@ const csd_plugin::IOLayout& Processor::get_io_layout() const {
 Parameters& Processor::get_parameters() {
     return parameters;
 }
+
+bool Processor::pop_log(LogMessage& msg) {
+    // RT-SAFE POP: try_read returns 0 if empty
+    size_t read_count = log_queue.try_read(1, [&](auto block1, auto block2) {
+        if (!block1.empty()) {
+            msg = block1[0];
+        } else {
+            msg = block2[0];
+        }
+    });
+    return read_count > 0;
+}
+
 }

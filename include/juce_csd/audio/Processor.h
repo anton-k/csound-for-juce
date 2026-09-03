@@ -7,8 +7,14 @@
 #include "../params/Parameters.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csd_plugin/audio/Processor.h>
+#include <LockFreeSpscQueue.h>
 
 namespace juce_csd {
+
+struct LogMessage {
+    csd_plugin::LogLevel level;
+    char text[512];
+};
 
 /// Class for the audio processor which runs the Csound.
 // Value of this class can be used to define all methods of the plugin which relies
@@ -45,6 +51,8 @@ class Processor {
     /// Get IO-layout of the plugin
     const csd_plugin::IOLayout& get_io_layout() const;
 
+    bool pop_log(LogMessage& msg);
+
   private:
     void read_midi_from_host(juce::MidiBuffer&);
     void write_midi_to_host(juce::MidiBuffer&, int, int);
@@ -54,6 +62,14 @@ class Processor {
 
     csd_plugin::Processor csound;
     Parameters parameters;
+
+    // 1. User-owned buffer (allocated once, never resized)
+    std::array<LogMessage, 1024> log_buffer;
+
+    // 2. The queue manager (manages indices, prevents false sharing)
+    LockFreeSpscQueue<LogMessage> log_queue;
+
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Processor)
 };
 
