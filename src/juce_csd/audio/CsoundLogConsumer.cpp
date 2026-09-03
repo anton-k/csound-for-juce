@@ -22,7 +22,6 @@ void CsoundLogConsumer::stop_consuming() {
 
 void CsoundLogConsumer::enable_file_logging(const juce::File& logFile, const juce::String&
 welcomeMessage) {
-    // Create a file logger (1MB max size to prevent infinite disk growth)
     fileLogger = std::make_unique<juce::FileLogger>(logFile, welcomeMessage, 1024 * 1024);
 }
 
@@ -36,30 +35,59 @@ void CsoundLogConsumer::set_ui_callback(UICallback callback) {
 
 void CsoundLogConsumer::timerCallback() {
     LogMessage msg;
+    bool receivedAnything = false;
 
+    // 1. Drain the RT-safe queue
     while (processorRef.pop_log(msg)) {
-        juce::String text(msg.text);
-        juce::String prefix;
+        receivedAnything = true;
 
-        // Format prefix based on Source and Level
-        if (msg.source == LogSource::Csound) {
-            if (msg.level == csd_plugin::LogLevel::Error) prefix = "[Csound ERROR] ";
-            else if (msg.level == csd_plugin::LogLevel::Warning) prefix = "[Csound WARN]  ";
-            else prefix = "[Csound INFO]  ";
-        } else {
-            if (msg.level == csd_plugin::LogLevel::Error) prefix = "[Plugin ERROR] ";
-            else if (msg.level == csd_plugin::LogLevel::Warning) prefix = "[Plugin WARN]  ";
-            else prefix = "[Plugin INFO]  ";
+        // If severity or source changes, flush the previous buffer first
+        if (!pendingText.isEmpty() && (msg.level != pendingLevel || msg.source !=
+pendingSource)) {
+            flush_pending();
         }
 
-        juce::String fullMessage = prefix + text;
+        pendingLevel = msg.level;
+        pendingSource = msg.source;
+        pendingText += msg.text;
+    }
 
-        // Route to Console, File, and UI...
-        juce::Logger::writeToLog(fullMessage);
-        if (fileLogger) fileLogger->logMessage(fullMessage);
-        if (uiCallback) uiCallback(fullMessage, msg.level);
+    // 2. Flush logic:
+    // Csound messages usually end with a newline. If we see one, it's complete.
+    if (receivedAnything && pendingText.endsWith("\n")) {
+        flush_pending();
+    }
+    // Fallback: If the queue is empty but we have text, Csound stopped sending.
+    // Flush it now to prevent infinite latency.
+    else if (!receivedAnything && !pendingText.isEmpty()) {
+        flush_pending();
     }
 }
 
-} // namespace juce_csd
+void CsoundLogConsumer::flush_pending() {
+    // Trim removes leading/trailing whitespace, preserving internal newlines
+    juce::String cleanText = pendingText.trim();
+    pendingText.clear();
 
+    if (cleanText.isEmpty()) return;
+
+    juce::String prefix;
+    if (pendingSource == LogSource::Csound) {
+        if (pendingLevel == csd_plugin::LogLevel::Error) prefix = "[Csound ERROR] ";
+        else if (pendingLevel == csd_plugin::LogLevel::Warning) prefix = "[Csound WARN]  ";
+        else prefix = "[Csound INFO]  ";
+    } else {
+        if (pendingLevel == csd_plugin::LogLevel::Error) prefix = "[Plugin ERROR] ";
+        else if (pendingLevel == csd_plugin::LogLevel::Warning) prefix = "[Plugin WARN]  ";
+        else prefix = "[Plugin INFO]  ";
+    }
+
+    juce::String fullMessage = prefix + cleanText;
+
+    // Route to Console, File, and UI as a SINGLE unified message
+    juce::Logger::writeToLog(fullMessage);
+    if (fileLogger) fileLogger->logMessage(fullMessage);
+    if (uiCallback) uiCallback(fullMessage, pendingLevel);
+}
+
+} // namespace juce_csd

@@ -158,7 +158,7 @@ void Processor::setup_csound(int sample_rate) {
     csound->SetMessageCallback(csound_message_callback);
 
     set_csound_midi_callbacks();
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0", static_cast<int>(sample_rate));
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
     csound->SetOption(options.c_str());
     int compile_result = csound->CompileCSD(csd_file_content.c_str(), 1);
     int start_result = csound->Start();
@@ -300,20 +300,37 @@ int Processor::get_current_sample() {
     return current_sample;
 }
 
-void Processor::csound_message_callback(CSOUND* csound, int attr, const char* format, va_list val)
+void Processor::csound_message_callback(CSOUND* csound, int attr, const char* format, va_list
+val)
 {
     char buffer[2048];
     vsnprintf(buffer, sizeof(buffer), format, val);
 
+    // DEBUG: Check your IDE/Terminal console for this output!
+    DBG("Csound raw attr: " << attr << " | Text: " << buffer);
+
+    // CORRECT MASK: Csound stores the message type in the lowest 3 bits (0x7).
+    int type = attr & 0x7;
+
     csd_plugin::LogLevel level = csd_plugin::LogLevel::Info;
-    if (attr & CSOUNDMSG_ERROR) level = csd_plugin::LogLevel::Error;
-    else if (attr & CSOUNDMSG_WARNING) level = csd_plugin::LogLevel::Warning;
+
+    // 1 = CSOUNDMSG_ERROR
+    if (type == 1) {
+        level = csd_plugin::LogLevel::Error;
+    }
+    // 2 = CSOUNDMSG_WARNING
+    else if (type == 2) {
+        level = csd_plugin::LogLevel::Warning;
+    }
+    // 0 = Default, 3 = Orch, 4 = Realtime (printk) -> All fall through to Info
 
     auto* processor = static_cast<csd_plugin::Processor*>(csoundGetHostData(csound));
     if (processor) {
         processor->log(level, buffer);
     }
 }
+
+
 
 
 }

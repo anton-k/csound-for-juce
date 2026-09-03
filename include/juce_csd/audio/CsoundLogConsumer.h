@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <juce_core/juce_core.h>
@@ -11,7 +12,8 @@ namespace juce_csd {
 /// It routes messages to the JUCE console, an optional file, and a UI callback.
 class CsoundLogConsumer : private juce::Timer {
 public:
-    using UICallback = std::function<void(const juce::String& message, csd_plugin::LogLevel level)>;
+    using UICallback = std::function<void(const juce::String& message, csd_plugin::LogLevel
+level)>;
 
     explicit CsoundLogConsumer(Processor& processor);
     ~CsoundLogConsumer() override;
@@ -21,7 +23,8 @@ public:
     void stop_consuming();
 
     /// Optional: Route logs to a file. Max file size defaults to 1MB to prevent disk bloat.
-    void enable_file_logging(const juce::File& logFile, const juce::String& welcomeMessage = {});
+    void enable_file_logging(const juce::File& logFile, const juce::String& welcomeMessage =
+{});
     void disable_file_logging();
 
     /// Optional: Register a lambda to receive logs for UI updates (e.g., error banners)
@@ -29,10 +32,18 @@ public:
 
 private:
     void timerCallback() override;
+    void flush_pending(); // <-- Added
 
     Processor& processorRef;
     std::unique_ptr<juce::FileLogger> fileLogger;
     UICallback uiCallback;
+
+    // Buffer to accumulate fragmented Csound messages
+    juce::String pendingText;
+    csd_plugin::LogLevel pendingLevel = csd_plugin::LogLevel::Info;
+    LogSource pendingSource = LogSource::Csound;
 };
 
 } // namespace juce_csd
+
+
