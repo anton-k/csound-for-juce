@@ -164,12 +164,23 @@ void Processor::setup_csound(int sample_rate) {
     compilation_log_buffer.clear();
 
     int compile_result = csound->CompileCSD(csd_file_content.c_str(), 1);
-    int start_result = csound->Start();
+    int start_result = 0;
+    if (compile_result == 0) {
+        start_result = csound->Start();
+    }
 
     is_compiling = false;
-
     if (compile_result != 0 || start_result != 0) {
-        // Flush the captured compilation log as an Error
+        // CRITICAL FIX: Leak the corrupted instance and replace with an EMPTY instance.
+        // DO NOT compile or start the dummy instance. An unstarted Csound object
+        // spawns no background threads and is perfectly safe to destroy.
+        csound->SetHostData(nullptr);
+        csound.release();
+
+        csound = std::unique_ptr<Csound>(new Csound());
+        csound->SetHostData(this);
+        csound->SetMessageCallback(csound_message_callback);
+
         if (!compilation_log_buffer.empty()) {
             log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
         } else {
@@ -179,6 +190,7 @@ void Processor::setup_csound(int sample_rate) {
         ready_to_play = false;
         return;
     }
+
 
     ready_to_play = true;
 }
@@ -202,14 +214,16 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
 
         // Now it is 100% guaranteed that process_block is not running.
         if (csound != nullptr) {
+            csound->SetHostData(nullptr);
+            log_callback = nullptr;
             csound.reset();    // Safe to destroy
         }
 
         setup_csound(sample_rate);
-        csound_settings.prepare(csound.get());
-
-        current_sample_rate = sample_rate;
-        ready_to_play = true;
+        if (ready_to_play) {
+            csound_settings.prepare(csound.get());
+            current_sample_rate = sample_rate;
+        }
     }
 
     // 3. Resize buffers if needed
@@ -249,10 +263,14 @@ void Processor::release_resources() {
         std::this_thread::yield();
     }
 
+    bool was_ready = ready_to_play;
     ready_to_play = false;
+
     if (csound != nullptr) {
-        csound->Reset();
+        // Sever the host data link to prevent use-after-free in the callback
+        csound->SetHostData(nullptr);
     }
+
     clear_buffers();
     current_sample = 0;
     current_sample_rate = 0;

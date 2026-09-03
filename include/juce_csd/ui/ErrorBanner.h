@@ -33,13 +33,18 @@ public:
     void addError(const juce::String& message) {
         // Prevent UI hangs by limiting the maximum number of characters.
         // juce::TextEditor layout performance degrades significantly with large text blocks.
+       juce::String safeMessage = message;
+        if (safeMessage.length() > 2000) {
+            safeMessage = safeMessage.substring(0, 2000) + "\n... [Log truncated to prevent UI freeze] ...";
+        }
+
         auto currentText = logDisplay.getText();
-        if (currentText.length() > 8000) {
+        if (currentText.length() > 4000) {
             logDisplay.setText(currentText.substring(currentText.length() - 6000));
         }
 
         logDisplay.moveCaretToEnd();
-        logDisplay.insertTextAtCaret(message + "\n");
+        logDisplay.insertTextAtCaret(safeMessage + "\n");
 
         setVisible(true);
         updateBounds();
