@@ -147,7 +147,7 @@ class Processor {
 
     /// Reads sample from the output audio buffer. Use it after process_block to read
     // read sampels processed with Csound and write them to the host.
-    void read_output(double& sample);
+    bool read_output(double& sample);
 
     /// Is Csound ready to play
     bool is_ready_to_play() {
@@ -230,7 +230,7 @@ class Processor {
     int get_csound_cycle_size(int block_size);
     void set_csound_midi_callbacks();
     void set_host_io();
-    void setup_csound(int sample_rate);
+    bool setup_csound(int sample_rate);
     void clear_buffers();
 
     // midi callbacks

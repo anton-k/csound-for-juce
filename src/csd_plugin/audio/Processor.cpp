@@ -18,6 +18,9 @@ namespace csd_plugin {
 namespace {
 
 double wrap_limiter(double sample) {
+    if (std::isnan(sample) || std::isinf(sample)) {
+        return 0.0; // RT-safe NaN/Inf protection
+    }
     return std::clamp(sample, -WRAP_VOLUME_LIMIT, WRAP_VOLUME_LIMIT);
 }
 
@@ -72,9 +75,16 @@ void Processor::write_input(double sample) {
     audio_buffers.in().write(csound_settings.zero_dbfs * sample);
 }
 
-void Processor::read_output(double& sample) {
-    audio_buffers.out().read(sample);
-    sample = wrap_limiter(csound_settings.inverse_zero_dbfs * sample);
+bool Processor::read_output(double& sample) {
+    bool read_success = audio_buffers.out().read(sample);
+
+    if (!read_success) {
+        sample = 0.0; // Prevent stale memory/feedback loops on underflow
+    } else {
+        sample = wrap_limiter(csound_settings.inverse_zero_dbfs * sample);
+    }
+
+    return read_success;
 }
 
 void Processor::set_host_io() {
@@ -149,7 +159,7 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
     return 0;
 }
 
-void Processor::setup_csound(int sample_rate) {
+bool Processor::setup_csound(int sample_rate) {
     csound = std::unique_ptr<Csound>(new Csound());
 
     csound->SetHostData(this);
@@ -177,12 +187,12 @@ void Processor::setup_csound(int sample_rate) {
 
         log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
         ready_to_play = false;
-        return;
+        return false;
     }
 
     // SUCCESS: Clear any previous errors
     clear_last_error();
-    ready_to_play = true;
+    return true;
 }
 
 void Processor::prepare_to_play(int sample_rate, int max_block_size) {
@@ -193,39 +203,43 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
     current_sample = 0;
     clear_buffers();
 
+    // Ensure audio thread is blocked from processing while we reconfigure
+    ready_to_play = false;
+
     // 2. Safely re-initialize Csound if sample rate changed
     if (needs_reinit) {
-        // WAIT for the audio thread to finish its current block.
-        // This blocks the MESSAGE/SETUP thread, which is perfectly safe.
-        // The AUDIO thread is NEVER blocked.
         while (is_processing_.load(std::memory_order_acquire)) {
             std::this_thread::yield();
         }
 
-        // Now it is 100% guaranteed that process_block is not running.
         if (csound != nullptr) {
             csound->SetHostData(nullptr);
             log_callback = nullptr;
-            csound.reset();    // Safe to destroy
+            csound.reset();
         }
 
-        setup_csound(sample_rate);
-        if (ready_to_play) {
+        if (setup_csound(sample_rate)) {
             csound_settings.prepare(csound.get());
             current_sample_rate = sample_rate;
+        } else {
+            ready_to_play = false;
+            csound_is_valid = false;
+            return;
         }
     }
 
     // 3. Resize buffers if needed
     if (needs_buffer_resize || needs_reinit) {
-        int max_frames = max_block_size + (csound_settings.ksmps * 2);
-        int in_capacity = std::max(1024, max_frames * io_layout.get_total_in_size());
-        int out_capacity = std::max(1024, max_frames * io_layout.get_out_size());
+        // Increase safety margin to handle DAW block-size drift
+        int max_frames = std::max(max_block_size, 2048) + (csound_settings.ksmps * 4);
+
+        // Ensure a minimum capacity of 8192 samples to prevent overflow
+        int in_capacity = std::max(8192, max_frames * io_layout.get_total_in_size());
+        int out_capacity = std::max(8192, max_frames * io_layout.get_out_size());
 
         audio_buffers.reset(in_capacity, out_capacity);
         current_max_block_size = max_block_size;
     }
-
 
     if (audio_buffers.out().get_size() == 0) {
         if (io_layout.get_total_in_size() > 0) {
@@ -236,7 +250,11 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
         }
     }
 
+    // 4. FINALLY, enable processing ONLY when everything is 100% ready
+    ready_to_play = true;
 }
+
+
 
 
 void Processor::process_block(int block_size)
@@ -267,19 +285,47 @@ void Processor::release_resources() {
     current_max_block_size = 0;
 }
 
+int Processor::get_csound_cycle_size(int block_size) {
+    int out_size = io_layout.get_out_size();
+    int ksmps = csound_settings.ksmps;
+
+    int current_out_frames = audio_buffers.out().get_size() / std::max(1, out_size);
+
+    // Target: enough frames for the host to read, plus 1 ksmps safety margin
+    int target_frames = block_size + ksmps;
+    int cycles_needed = 0;
+
+    if (current_out_frames < target_frames) {
+        int frames_needed = target_frames - current_out_frames;
+        cycles_needed = (frames_needed + ksmps - 1) / ksmps;
+    }
+
+    return cycles_needed;
+}
+
 void Processor::csound_process(int buffer_size) {
     csound_cycle_size = get_csound_cycle_size(buffer_size);
     int in_size = io_layout.get_total_in_size();
     int out_size = io_layout.get_out_size();
     int ksmps = csound_settings.ksmps;
 
-    float sample{0.0};
     for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
-        current_cycle_end_sample = current_sample + csound_settings.ksmps;
+
+        // Prevent output FIFO overflow
+        if (audio_buffers.out().get_free_space() < (ksmps * out_size)) {
+            break;
+        }
+
+        current_cycle_end_sample = current_sample + ksmps;
 
         if (in_size > 0) {
             double* spin = csound->GetSpin();
-            audio_buffers.in().read_block(spin, ksmps * in_size);
+            bool read_success = audio_buffers.in().read_block(spin, ksmps * in_size);
+
+            // If input underflows, pad with silence to maintain perfect time-sync
+            if (!read_success) {
+                std::memset(spin, 0, ksmps * in_size * sizeof(double));
+            }
         }
 
         if (krate_callback) {
@@ -289,7 +335,10 @@ void Processor::csound_process(int buffer_size) {
         csound->PerformKsmps();
 
         const double* spout = csound->GetSpout();
+
+        // This will now always succeed because we checked free space above
         audio_buffers.out().write_block(spout, ksmps * out_size);
+
         current_sample = current_cycle_end_sample;
     }
 }
@@ -297,23 +346,6 @@ void Processor::csound_process(int buffer_size) {
 void Processor::clear_buffers() {
     audio_buffers.clear();
     midi_buffers.clear();
-}
-
-int Processor::get_csound_cycle_size(int block_size) {
-    int out_size = io_layout.get_out_size();
-    int current_out_frames = audio_buffers.out().get_size() / out_size;
-
-    // Ensure we have enough frames for the host to read, plus 1 ksmps safety margin
-    int target_frames = block_size + csound_settings.ksmps;
-
-    if (current_out_frames >= target_frames) {
-        return 0;
-    }
-
-    int frames_needed = target_frames - current_out_frames;
-    int cycles_needed = (frames_needed + csound_settings.ksmps - 1) / csound_settings.ksmps;
-
-    return cycles_needed;
 }
 
 int Processor::get_current_sample() {
@@ -352,8 +384,5 @@ void Processor::csound_message_callback(CSOUND* csound, int attr, const char* fo
         }
     }
 }
-
-
-
 
 }

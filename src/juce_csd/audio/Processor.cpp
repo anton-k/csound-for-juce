@@ -51,6 +51,11 @@ void Processor::prepareToPlay (double sample_rate, int max_block_size)
 
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)
 {
+    if (!csound.is_ready_to_play()) {
+        buffer.clear();
+        host_midi_buffer.clear();
+        return;
+    }
 
     // JUCE plugins should enforce it at the entry point to
     // prevent massive CPU spikes on x86 architectures.
@@ -115,10 +120,14 @@ void Processor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
     int max_channels = std::max(csd_out_size, host_out_size);
 
     double sample{0.0};
+    bool read_success;
     for (int sample_index = 0; sample_index < sample_size; ++sample_index) {
         for (int channel_index = 0; channel_index < max_channels; ++channel_index) {
             if (channel_index < csd_out_size) {
-                csound.read_output(sample);
+                read_success = csound.read_output(sample);
+                if (!read_success) {
+                    sample = 0.0; // Fallback to silence on underflow
+                }
             } else {
                 sample = 0.0;
             }

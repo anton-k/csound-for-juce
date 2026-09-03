@@ -34,6 +34,8 @@ class AudioBuffer {
     /// Resets the buffer to the new capacity
     void reset(int capacity);
 
+    int get_free_space() { return queue.get_free_space(); }
+
   private:
     FastFifo<double> queue;
     std::atomic<int> current_capacity{0};

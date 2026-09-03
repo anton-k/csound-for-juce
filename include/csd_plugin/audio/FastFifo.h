@@ -101,6 +101,11 @@ space_until_end) * sizeof(T));
     int get_capacity() const { return static_cast<int>(size_); }
     void clear() { read_pos_ = write_pos_ = 0; }
 
+    int get_free_space() const {
+        return static_cast<int>(size_ - (write_pos_ - read_pos_));
+    }
+
+
 private:
     std::vector<T> buffer_;
     uint32_t size_ = 0;
