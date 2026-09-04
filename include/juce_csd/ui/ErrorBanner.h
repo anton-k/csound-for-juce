@@ -42,9 +42,13 @@ public:
             safeMessage = safeMessage.substring(0, 2000) + "\n... [Log truncated to prevent UI freeze] ...";
         }
 
+        const int maxChars = 6000;
+        const int keepChars = 4000;
+
         auto currentText = logDisplay.getText();
-        if (currentText.length() > 4000) {
-            logDisplay.setText(currentText.substring(currentText.length() - 6000));
+
+        if (currentText.length() > maxChars) {
+            logDisplay.setText(currentText.substring(currentText.length() - keepChars));
         }
 
         logDisplay.moveCaretToEnd();
