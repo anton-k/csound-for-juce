@@ -829,12 +829,8 @@ If I were prioritizing fixes for v1.0, I would do them in this order:
 
 ### Phase 1: correctness blockers
 
-1. Initialize host parameters.
 2. Fix choice parameter 0-based/1-based convention.
 3. Fix MIDI timestamp coordinate system.
-4. Fix latency double-counting.
-5. Fix `MemoryOutputStream` append mode.
-6. Fix `ErrorBanner` truncation bug.
 7. Fix MIDI output size cast bug.
 8. Guard `prepareToPlay` against failed Csound compilation.
 
