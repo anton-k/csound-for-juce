@@ -28,14 +28,7 @@ struct CsoundSettings {
 /// Layout of the IO-busses. How many inputs/outputs. Does it have MIDI or side-chain.
 struct IOLayout {
     IOLayout() {};
-    IOLayout(const IOLayout& that) {
-      sidechain_size = that.sidechain_size;
-      has_midi_in = that.has_midi_in;
-      has_midi_out = that.has_midi_out;
-      in_size = that.in_size;
-      out_size = that.out_size;
-      extra_latency_samples = that.extra_latency_samples;
-    }
+    IOLayout(const IOLayout&) = default;
 
     bool has_midi_in {false}; ///< Has MIDI input
     bool has_midi_out {false}; ///< Has MIDI output
@@ -50,7 +43,7 @@ struct IOLayout {
       return out_size;
     }
 
-    static IOLayout synt() {
+    static IOLayout synth() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = true;
@@ -60,7 +53,7 @@ struct IOLayout {
       return layout;
     };
 
-    static IOLayout synt_mono() {
+    static IOLayout synth_mono() {
       IOLayout layout{};
       layout.sidechain_size = 0;
       layout.has_midi_in = true;
@@ -261,7 +254,7 @@ class Processor {
     std::function<void()> krate_callback;
 
     LogCallback log_callback;
-    bool is_compiling{false};
+    std::atomic<bool> is_compiling{false};
     std::string compilation_log_buffer;
     char last_error_buffer_[4096] = {0};
     std::atomic<bool> has_error_{false};

@@ -7,6 +7,7 @@
 
 namespace csd_plugin {
 
+/// Fast FIFO queue for single-thread use only.
 template <typename T>
 class FastFifo {
     static_assert(std::is_trivially_copyable_v<T>, "FastFifo requires trivially copyable types for fast memcpy");

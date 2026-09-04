@@ -57,3 +57,114 @@ and distribute with the plugin
    * plugin that uses host params (metronome or delay that reads bpm)
    * plugin with sidechain (for example envelope follower or gate plugin)
    * plugin that only processes midi (for example transpose plugin)
+
+
+Bugs/inconsistencies:
+
+### 2.6 Last-error buffer can be read while being modified
+
+**File:** `include/csd_plugin/audio/Processor.h`
+
+`set_last_error` is RT-safe, which is good.
+
+But `get_last_error()` reads `last_error_buffer_` from the UI thread while the audio thread may concurrently call `set_last_error`.
+
+The atomic `has_error_` flag helps, but if an error is already set and a new error arrives, the UI may read a partially overwritten buffer.
+
+**Possible fixes:**
+
+- use a small fixed-size ring of error messages;
+- use a sequence number and double buffering;
+- only allow UI to read a snapshot copied atomically;
+- or accept truncation/torn messages but document it.
+
+---
+
+### 2.7 Logging can flood the queue/file
+
+The Csound message callback routes messages into a queue. If Csound code uses opcodes like `printk`, `printks`, `printf`, etc., it can generate messages at k-rate.
+
+The example CSD in the QuickStart guide contains:
+
+```csound
+printk2 kfeedback
+printk2 kcutOff
+printk2 kmix
+```
+
+That can spam logs heavily.
+
+**Recommendations:**
+
+- remove `printk2` from example plugin code;
+- add log throttling;
+- optionally suppress Csound console messages in release builds;
+- provide a debug switch.
+
+---
+
+### 2.9 `juce::Logger::writeToLog` and `fileLogger` may duplicate logs
+
+**File:** `src/juce_csd/audio/CsoundLogConsumer.cpp`
+
+```cpp
+juce::Logger::writeToLog(fullMessage);
+if (fileLogger) fileLogger->logMessage(fullMessage);
+```
+
+If the global JUCE logger is already writing to a file, this may duplicate messages.
+
+Consider choosing one routing strategy:
+
+- console/global logger only;
+- file logger only;
+- UI callback only;
+- or make it configurable.
+
+---
+
+### 2.10 `getTailLengthSeconds()` returns infinity
+
+**File:** `src/juce_csd/plugin/PluginProcessor.cpp`
+
+```cpp
+return std::numeric_limits<double>::infinity();
+```
+
+This is safe for tails, but some hosts may handle infinite tails poorly during offline bounce or freeze.
+
+Consider making this configurable:
+
+```cpp
+IOLayout::tail_time_seconds
+```
+
+or returning a large finite value.
+
+---
+
+### 2.13 `PluginProcessor::make_buses_properties` only supports mono/stereo
+
+**File:** `src/juce_csd/plugin/PluginProcessor.cpp`
+
+```cpp
+switch (io_layout.in_size) {
+    case 1: ...
+    case 2: ...
+}
+```
+
+There is no default case.
+
+If someone creates an `IOLayout` with 4 inputs, no bus is added and the plugin will probably fail confusingly.
+
+**Options:**
+
+- explicitly support only mono/stereo and `static_assert`/validate;
+- add multichannel support;
+- log an error.
+
+---
+
+
+
