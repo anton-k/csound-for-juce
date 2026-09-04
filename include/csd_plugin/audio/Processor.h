@@ -177,7 +177,7 @@ class Processor {
     }
 
     /// Returns absolute processing time in samples (How many samples were processed so far from the call to prepare_to_play)
-    int get_current_sample();
+    int64_t get_current_sample();
 
 
     /// Set a callback to be executed right before each Csound ksmps cycle.
@@ -224,8 +224,12 @@ class Processor {
         has_error_.store(false, std::memory_order_release);
     }
 
+    void resync_audio_buffers();
 
   private:
+    void ensure_output_for_block(int block_size);
+    bool validate_io_layout();
+
     void prepare_audio_buffers(int max_block_size);
     bool prepare_csound_to_play(int sample_rate);
 

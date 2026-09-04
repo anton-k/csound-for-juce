@@ -18,7 +18,7 @@ struct RawMidiEvent {
     RawMidiEvent() : samplePosition(0), size(0), data{0, 0, 0, 0} {}
 
     // Constructor from raw bytes
-    RawMidiEvent(int32_t pos, const uint8_t* rawData, uint8_t rawDataSize)
+    RawMidiEvent(int64_t pos, const uint8_t* rawData, uint8_t rawDataSize)
         : samplePosition(pos), size(rawDataSize > MIDI_DATA_SIZE ? MIDI_DATA_SIZE : rawDataSize)
     {
         // Fast, zero-allocation copy.

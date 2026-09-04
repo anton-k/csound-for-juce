@@ -22,9 +22,6 @@ chnset 0.6, "mix"
 kfeedback chngetk "size"
 kcutOff chngetk "tone"
 kmix chngetk "mix"
-printk2 kfeedback
-printk2 kcutOff
-printk2 kmix
 
 ainL, ainR  inch 1, 2
 awetL, awetR  reverbsc ainL, ainR, kfeedback, 20000 * kcutOff

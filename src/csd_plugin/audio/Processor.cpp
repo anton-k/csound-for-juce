@@ -31,11 +31,23 @@ bool is_control_channel_type(controlChannelInfo_t info) {
   return (info.type & CSOUND_CHANNEL_TYPE_MASK) == CSOUND_CONTROL_CHANNEL;
 }
 
-int get_desired_audio_buffer_size(int size, int max_block_size, int ksmps) {
-    int max_frames = std::max(max_block_size, 2048) + ksmps * 4;
-    // If a bus has 0 channels (e.g., MIDI-only plugin), its desired capacity is 0.
-    return (size > 0) ? std::max(8192, max_frames * size) : 0;
+int get_desired_audio_buffer_size(int channels, int max_block_size, int ksmps)
+{
+    if (channels <= 0)
+        return 0;
+
+    // Some hosts can behave oddly. Keep a conservative hard floor.
+    const int safe_block_size = std::max(max_block_size * 2, 8192);
+
+    // Worst-case output occupancy should stay below block_size + ksmps.
+    // Use extra safety margin.
+    const int safety_frames = std::max(4 * ksmps, 256);
+
+    const int frames = safe_block_size + safety_frames;
+
+    return frames * channels;
 }
+
 
 }
 
@@ -211,12 +223,24 @@ bool Processor::setup_csound(int sample_rate) {
     return true;
 }
 
-void Processor::prepare_to_play(int sample_rate, int max_block_size) {
+void Processor::prepare_to_play(int sample_rate, int max_block_size)
+{
     ready_to_play = prepare_csound_to_play(sample_rate);
-    prepare_audio_buffers(max_block_size);
-    current_sample = 0;
-    midi_buffers.clear();
 
+    if (!ready_to_play) {
+        return;
+    }
+
+    if (!validate_io_layout()) {
+        ready_to_play = false;
+        return;
+    }
+
+    prepare_audio_buffers(max_block_size);
+
+    current_sample = 0;
+    current_cycle_end_sample = 0;
+    midi_buffers.clear();
 }
 
 bool Processor::prepare_csound_to_play(int sample_rate) {
@@ -250,32 +274,40 @@ bool Processor::prepare_csound_to_play(int sample_rate) {
     return true;
 }
 
-void Processor::prepare_audio_buffers(int max_block_size) {
-    int in_size = io_layout.get_total_in_size();
-    int out_size = io_layout.get_out_size();
-    int desired_in_capacity = get_desired_audio_buffer_size(in_size, max_block_size, csound_settings.ksmps);
-    int desired_out_capacity = get_desired_audio_buffer_size(out_size, max_block_size, csound_settings.ksmps);
-    audio_buffers.reset(desired_in_capacity, desired_out_capacity);
-    current_max_block_size = max_block_size;
+void Processor::prepare_audio_buffers(int max_block_size)
+{
+    const int in_size = io_layout.get_total_in_size();
+    const int out_size = io_layout.get_out_size();
+    const int ksmps = csound_settings.ksmps;
 
-    // Prefill output buffer if it's an FX (has inputs) to compensate for latency
-    if (in_size > 0 && out_size > 0) {
-        int prefill_size = csound_settings.ksmps * out_size;
-        for (int i = 0; i < prefill_size; ++i) {
-            audio_buffers.out().write(0.0);
-        }
-    }
+    const int desired_in_capacity =
+        get_desired_audio_buffer_size(in_size, max_block_size, ksmps);
+
+    const int desired_out_capacity =
+        get_desired_audio_buffer_size(out_size, max_block_size, ksmps);
+
+    audio_buffers.reset(desired_in_capacity, desired_out_capacity);
+
+    current_max_block_size = std::max(max_block_size, 8192);
+
+    resync_audio_buffers();
 }
+
 
 
 void Processor::process_block(int block_size)
 {
-    if (ready_to_play) {
-        is_processing_.store(true, std::memory_order_release);
-        csound_process(block_size);
-        is_processing_.store(false, std::memory_order_release);
-    }
+    if (!ready_to_play || block_size <= 0)
+        return;
+
+    is_processing_.store(true, std::memory_order_release);
+
+    csound_process(block_size);
+    ensure_output_for_block(block_size);
+
+    is_processing_.store(false, std::memory_order_release);
 }
+
 
 void Processor::release_resources() {
     ready_to_play = false;
@@ -367,7 +399,7 @@ void Processor::clear_buffers() {
     midi_buffers.clear();
 }
 
-int Processor::get_current_sample() {
+int64_t Processor::get_current_sample() {
     return current_sample;
 }
 
@@ -403,5 +435,77 @@ void Processor::csound_message_callback(CSOUND* csound, int attr, const char* fo
         }
     }
 }
+
+bool Processor::validate_io_layout()
+{
+    if (!csound) {
+        set_last_error("Csound instance is null");
+        return false;
+    }
+
+    if (csound_settings.out_size != io_layout.get_out_size()) {
+        set_last_error("IOLayout output channels do not match Csound nchnls");
+        return false;
+    }
+
+    if (csound_settings.in_size != io_layout.get_total_in_size()) {
+        set_last_error("IOLayout input channels do not match Csound nchnls_i");
+        return false;
+    }
+
+    return true;
+}
+
+void Processor::resync_audio_buffers()
+{
+    audio_buffers.clear();
+    midi_buffers.clear();
+
+    const int in_size = io_layout.get_total_in_size();
+    const int out_size = io_layout.get_out_size();
+    const int ksmps = csound_settings.ksmps;
+
+    // For FX plugins, prefill one Csound cycle of silence.
+    // This creates the expected initial latency and prevents first-block
+    // input underflow.
+    if (in_size > 0 && out_size > 0 && ksmps > 0) {
+        const int prefill_samples = ksmps * out_size;
+
+        for (int i = 0; i < prefill_samples; ++i) {
+            audio_buffers.out().write(0.0);
+        }
+    }
+}
+
+void Processor::ensure_output_for_block(int block_size)
+{
+    const int out_size = io_layout.get_out_size();
+
+    if (out_size <= 0 || block_size <= 0)
+        return;
+
+    const int needed_samples = block_size * out_size;
+    const int have_samples = audio_buffers.out().get_size();
+
+    if (have_samples >= needed_samples)
+        return;
+
+    const int missing_samples = needed_samples - have_samples;
+
+    int written = 0;
+
+    for (int i = 0; i < missing_samples; ++i) {
+        if (audio_buffers.out().write(0.0)) {
+            ++written;
+        }
+    }
+
+    if (written != missing_samples) {
+        set_last_error("Csound output FIFO underflow and padding failed");
+    } else {
+        set_last_error("Csound output FIFO underflow; padded with silence");
+    }
+}
+
 
 }

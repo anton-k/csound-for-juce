@@ -79,7 +79,6 @@ double PluginProcessor::getTailLengthSeconds() const
 }
 
 
-
 int PluginProcessor::getNumPrograms()
 {
     return 1;   // NB: some hosts don't cope very well if you tell them there are 0 programs,

@@ -37,6 +37,10 @@ void AudioBuffer::reset(int capacity) {
   clear();
 }
 
+int AudioBuffer::read_block_partial(double* dest, int num_items) {
+  return queue.read_block_partial(dest, num_items);
+}
+
 void AudioBuffer::clear() {
   queue.clear();
 }

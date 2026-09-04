@@ -36,6 +36,8 @@ class AudioBuffer {
 
     int get_free_space() { return queue.get_free_space(); }
 
+    int read_block_partial(double* dest, int num_items);
+
   private:
     FastFifo<double> queue;
     std::atomic<int> current_capacity{0};

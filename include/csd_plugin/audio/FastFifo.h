@@ -107,6 +107,48 @@ space_until_end) * sizeof(T));
     }
 
 
+    int read_block_partial(T* dest, int num_items) {
+        if (num_items <= 0)
+            return 0;
+
+        const uint32_t available = write_pos_ - read_pos_;
+
+        if (available == 0)
+            return 0;
+
+        uint32_t n = static_cast<uint32_t>(num_items);
+
+        if (n > available)
+            n = available;
+
+        const uint32_t read_idx = read_pos_ & mask_;
+        const uint32_t space_until_end = size_ - read_idx;
+
+        if (space_until_end >= n) {
+            std::memcpy(
+                dest,
+                &buffer_[read_idx],
+                static_cast<size_t>(n) * sizeof(T)
+            );
+        } else {
+            std::memcpy(
+                dest,
+                &buffer_[read_idx],
+                static_cast<size_t>(space_until_end) * sizeof(T)
+            );
+
+            std::memcpy(
+                dest + space_until_end,
+                &buffer_[0],
+                static_cast<size_t>(n - space_until_end) * sizeof(T)
+            );
+        }
+
+        read_pos_ += n;
+
+        return static_cast<int>(n);
+    }
+
 private:
     std::vector<T> buffer_;
     uint32_t size_ = 0;
