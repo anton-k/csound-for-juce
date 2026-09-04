@@ -298,22 +298,28 @@ void Processor::release_resources() {
     current_max_block_size = 0;
 }
 
-int Processor::get_csound_cycle_size(int block_size) {
-    int out_size = io_layout.get_out_size();
-    int ksmps = csound_settings.ksmps;
+static int ceil_div(int a, int b)
+{
+    return (a + b - 1) / b;
+}
 
-    int current_out_frames = audio_buffers.out().get_size() / std::max(1, out_size);
+int Processor::get_csound_cycle_size(int block_size)
+{
+    const int out_size = io_layout.get_out_size();
+    const int ksmps = csound_settings.ksmps;
 
-    // Target: enough frames for the host to read, plus 1 ksmps safety margin
-    int target_frames = block_size;
-    int cycles_needed = 0;
+    if (block_size <= 0 || out_size <= 0 || ksmps <= 0)
+        return 0;
 
-    if (current_out_frames < target_frames) {
-        int frames_needed = target_frames - current_out_frames;
-        cycles_needed = (frames_needed + ksmps - 1) / ksmps;
-    }
+    const int available_out_frames =
+        audio_buffers.out().get_size() / out_size;
 
-    return cycles_needed;
+    const int missing_frames = block_size - available_out_frames;
+
+    if (missing_frames <= 0)
+        return 0;
+
+    return ceil_div(missing_frames, ksmps);
 }
 
 void Processor::csound_process(int buffer_size) {
