@@ -224,7 +224,8 @@ class Processor {
 
 
   private:
-    bool csound_is_valid{false};
+    void prepare_audio_buffers(int max_block_size);
+    bool prepare_csound_to_play(int sample_rate);
 
     void csound_process(int block_size);
     int get_csound_cycle_size(int block_size);
@@ -254,7 +255,6 @@ class Processor {
     int current_cycle_end_sample{0};
 
     std::atomic<bool> is_processing_{false};
-    int current_sample_rate{0};
     int current_max_block_size{0};
     std::function<void()> krate_callback;
 

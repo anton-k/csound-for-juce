@@ -29,6 +29,12 @@ bool is_control_channel_type(controlChannelInfo_t info) {
   return (info.type & CSOUND_CHANNEL_TYPE_MASK) == CSOUND_CONTROL_CHANNEL;
 }
 
+int get_desired_audio_buffer_size(int size, int max_block_size, int ksmps) {
+    int max_frames = std::max(max_block_size, 2048) + ksmps * 4;
+    // If a bus has 0 channels (e.g., MIDI-only plugin), its desired capacity is 0.
+    return (size > 0) ? std::max(8192, max_frames * size) : 0;
+}
+
 }
 
 
@@ -196,22 +202,29 @@ bool Processor::setup_csound(int sample_rate) {
 }
 
 void Processor::prepare_to_play(int sample_rate, int max_block_size) {
-    bool needs_reinit = !ready_to_play || (current_sample_rate != sample_rate);
-    bool needs_buffer_resize = !ready_to_play || (current_max_block_size != max_block_size);
-
-    // 1. ALWAYS reset playback state
+    ready_to_play = prepare_csound_to_play(sample_rate);
+    prepare_audio_buffers(max_block_size);
     current_sample = 0;
-    clear_buffers();
+    midi_buffers.clear();
 
-    // Ensure audio thread is blocked from processing while we reconfigure
+}
+
+bool Processor::prepare_csound_to_play(int sample_rate) {
+    //
+    // 1. Csound re-initialization condition:
+    // Re-init ONLY if not ready (uninitialized/failed) OR sample_rate changed.
+    bool was_ready = ready_to_play.load();
+    bool needs_csound_reinit = !was_ready || (csound_settings.sample_rate != sample_rate);
+
+    // Block audio thread
     ready_to_play = false;
+    while (is_processing_.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
 
-    // 2. Safely re-initialize Csound if sample rate changed
-    if (needs_reinit) {
-        while (is_processing_.load(std::memory_order_acquire)) {
-            std::this_thread::yield();
-        }
 
+    // Re-initialize Csound if needed
+    if (needs_csound_reinit) {
         if (csound != nullptr) {
             csound->SetHostData(nullptr);
             log_callback = nullptr;
@@ -220,41 +233,29 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size) {
 
         if (setup_csound(sample_rate)) {
             csound_settings.prepare(csound.get());
-            current_sample_rate = sample_rate;
         } else {
-            ready_to_play = false;
-            csound_is_valid = false;
-            return;
+            return false;
         }
     }
-
-    // 3. Resize buffers if needed
-    if (needs_buffer_resize || needs_reinit) {
-        // Increase safety margin to handle DAW block-size drift
-        int max_frames = std::max(max_block_size, 2048) + (csound_settings.ksmps * 4);
-
-        // Ensure a minimum capacity of 8192 samples to prevent overflow
-        int in_capacity = std::max(8192, max_frames * io_layout.get_total_in_size());
-        int out_capacity = std::max(8192, max_frames * io_layout.get_out_size());
-
-        audio_buffers.reset(in_capacity, out_capacity);
-        current_max_block_size = max_block_size;
-    }
-
-    if (audio_buffers.out().get_size() == 0) {
-        if (io_layout.get_total_in_size() > 0) {
-            int prefill_size = csound_settings.ksmps * io_layout.get_out_size();
-            for (int index: std::ranges::iota_view(0, prefill_size)) {
-                audio_buffers.out().write(0.0f);
-            }
-        }
-    }
-
-    // 4. FINALLY, enable processing ONLY when everything is 100% ready
-    ready_to_play = true;
+    return true;
 }
 
+void Processor::prepare_audio_buffers(int max_block_size) {
+    int in_size = io_layout.get_total_in_size();
+    int out_size = io_layout.get_out_size();
+    int desired_in_capacity = get_desired_audio_buffer_size(in_size, max_block_size, csound_settings.ksmps);
+    int desired_out_capacity = get_desired_audio_buffer_size(out_size, max_block_size, csound_settings.ksmps);
+    audio_buffers.reset(desired_in_capacity, desired_out_capacity);
+    current_max_block_size = max_block_size;
 
+    // Prefill output buffer if it's an FX (has inputs) to compensate for latency
+    if (in_size > 0 && out_size > 0) {
+        int prefill_size = csound_settings.ksmps * out_size;
+        for (int i = 0; i < prefill_size; ++i) {
+            audio_buffers.out().write(0.0);
+        }
+    }
+}
 
 
 void Processor::process_block(int block_size)
@@ -281,7 +282,6 @@ void Processor::release_resources() {
 
     clear_buffers();
     current_sample = 0;
-    current_sample_rate = 0;
     current_max_block_size = 0;
 }
 

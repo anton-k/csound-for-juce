@@ -32,9 +32,9 @@ int AudioBuffer::get_capacity() {
 void AudioBuffer::reset(int capacity) {
   if (current_capacity.load() != capacity) {
     queue.reset(capacity);
-  } else {
-    clear();
+    current_capacity.store(capacity);
   }
+  clear();
 }
 
 void AudioBuffer::clear() {
