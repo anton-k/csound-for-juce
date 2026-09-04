@@ -79,7 +79,7 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
     const int block_size = buffer.getNumSamples();
 
     read_input_buffer_from_host(buffer);
-    read_midi_from_host(host_midi_buffer);
+    read_midi_from_host(host_midi_buffer, block_start_global_sample);
     update_parameters(processor.getPlayHead());
     csound.process_block(block_size);
     write_output_buffer_to_host(buffer);
@@ -138,14 +138,15 @@ void Processor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
     }
 }
 
-void Processor::read_midi_from_host(juce::MidiBuffer& host_midi_messages) {
+void Processor::read_midi_from_host(juce::MidiBuffer& host_midi_messages, int block_start_global_sample) {
     if (csound.get_io_layout().has_midi_in) {
         // Note: We filter out SysEx here
         // to guarantee 100% RT-safety (no hidden heap allocations)
         for (const auto metadata : host_midi_messages) {
             auto msg = metadata.getMessage();
             if (!msg.isSysEx()) {
-                csound.get_midi_buffers().in().push(csd_plugin::RawMidiEvent(metadata.samplePosition, msg.getRawData(), msg.getRawDataSize()));
+                int32_t global_pos = block_start_global_sample + metadata.samplePosition;
+                csound.get_midi_buffers().in().push(csd_plugin::RawMidiEvent(global_pos, msg.getRawData(), msg.getRawDataSize()));
             }
         }
     }

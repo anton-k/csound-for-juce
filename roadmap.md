@@ -11,8 +11,6 @@ Here is the prioritized roadmap for the library.
 If these are missing, the plugin will fail in professional DAW environments, cause audio
 glitches, or corrupt user projects.
 
-0. unit test fail: fix it (probably it runs tests from dependency for SPSC-queue)
-
 1. Csound Message & Error Routing. Logger is done and hanlding Csound compilation.
    Now we need to cover edge cases with log errors or warnings.
    Validation of parameters spec with Csound actual parameters. Find out edge cases check and emit errors

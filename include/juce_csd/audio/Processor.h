@@ -67,7 +67,7 @@ class Processor {
     std::string get_last_error() const { return csound.get_last_error(); }
 
   private:
-    void read_midi_from_host(juce::MidiBuffer&);
+    void read_midi_from_host(juce::MidiBuffer&, int);
     void write_midi_to_host(juce::MidiBuffer&, int, int);
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);

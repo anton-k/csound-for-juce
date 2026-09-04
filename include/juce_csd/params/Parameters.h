@@ -357,7 +357,9 @@ class Parameters {
     void init_int_audio_parameters(juce::AudioProcessor&, const std::vector<AudioParameterIntSpec>&);
     void init_ui_parameters(const std::vector<UiParameterSpec>&);
     void init_sensor_parameters(const std::vector<SensorParameterSpec>&);
-    void init_host_parameters(const std::vector<HostParameterSpec>&);
+    void init_host_parameters(const std::vector<HostParameterSpec>& params) {
+      host_parameters = params;
+    };
 
     void update_audio_params();
     void update_smoothed_audio_params();

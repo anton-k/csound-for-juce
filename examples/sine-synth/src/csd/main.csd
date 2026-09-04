@@ -9,7 +9,7 @@ nchnls  =  2
 nchnls_i = 0
 0dbfs   =  1.0
 
-massign 0, main
+massign 0, "main"
 
 chn_k "gain", 1, 2, 0.6, 0, 1
 chn_k "attack", 1, 2, 0.02, 0, 1

@@ -72,7 +72,7 @@ void CsoundSettings::set_channel_names(Csound* csound) {
 int Processor::get_latency_samples() {
     int csound_processing_latency =
         (io_layout.get_total_in_size() > 0)
-            ? csound_settings.ksmps + io_layout.extra_latency_samples
+            ? csound_settings.ksmps
             : 0;
     return io_layout.extra_latency_samples + csound_processing_latency;
 }
@@ -294,7 +294,7 @@ int Processor::get_csound_cycle_size(int block_size) {
     int current_out_frames = audio_buffers.out().get_size() / std::max(1, out_size);
 
     // Target: enough frames for the host to read, plus 1 ksmps safety margin
-    int target_frames = block_size + ksmps;
+    int target_frames = block_size;
     int cycles_needed = 0;
 
     if (current_out_frames < target_frames) {
