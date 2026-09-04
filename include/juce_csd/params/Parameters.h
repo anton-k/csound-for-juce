@@ -104,7 +104,6 @@ struct AudioParameterIntSpec {
   std::string name; ///< parameter name as it is displayed in the host
   int min; ///< minimum value
   int max; ///< maximum value
-  int step; ///< step of value change
   int default_value; ///< default value
 };
 
