@@ -268,17 +268,19 @@ void Processor::process_block(int block_size)
 }
 
 void Processor::release_resources() {
+    if (csound == nullptr) {
+        return;
+    }
+
     while (is_processing_.load(std::memory_order_acquire)) {
         std::this_thread::yield();
     }
 
-    bool was_ready = ready_to_play;
     ready_to_play = false;
 
-    if (csound != nullptr) {
-        // Sever the host data link to prevent use-after-free in the callback
-        csound->SetHostData(nullptr);
-    }
+    csound->SetHostData(nullptr);
+    log_callback = nullptr;
+    csound.reset();
 
     clear_buffers();
     current_sample = 0;

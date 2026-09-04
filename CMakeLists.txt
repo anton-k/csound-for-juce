@@ -15,7 +15,12 @@ endif()
 include(cmake/CPM.cmake)
 
 CPMAddPackage("gh:catchorg/Catch2@3.5.2")
-CPMAddPackage("gh:joz-k/LockFreeSpscQueue@1.0.3")
+CPMAddPackage(
+    NAME LockFreeSpscQueue
+    GITHUB_REPOSITORY joz-k/LockFreeSpscQueue
+    VERSION 1.0.3
+    OPTIONS "BUILD_TESTING OFF"
+)
 
 if(NOT TARGET juce::juce_audio_processors)
     CPMAddPackage("gh:juce-framework/JUCE#3af3ce009f6a02f6fa651008fffb5b41743a9fab")
