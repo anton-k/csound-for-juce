@@ -238,12 +238,12 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size)
     if (!ready_to_play) {
         return;
     }
-/*
+
     if (!validate_io_layout()) {
         ready_to_play = false;
         return;
     }
-*/
+
     prepare_audio_buffers(max_block_size);
 
     current_sample = 0;
@@ -433,7 +433,7 @@ void Processor::clear_buffers() {
     midi_buffers.clear();
 }
 
-int64_t Processor::get_current_sample() {
+int64_t Processor::get_current_sample() const {
     return current_sample;
 }
 
@@ -477,18 +477,26 @@ bool Processor::validate_io_layout()
         return false;
     }
 
-    if (csound_settings.out_size != io_layout.get_out_size()) {
+    const int layout_out_size = io_layout.get_out_size();
+    const int layout_total_in_size = io_layout.get_total_in_size();
+
+    if (layout_out_size > 0 && csound_settings.out_size != layout_out_size) {
         set_last_error("IOLayout output channels do not match Csound nchnls");
         return false;
     }
 
-    if (csound_settings.in_size != io_layout.get_total_in_size()) {
+    if (layout_total_in_size > 0 && csound_settings.in_size != layout_total_in_size) {
+        // Csound bug: it reports over API `nchnls_i = 0` as `1`
+        if (csound_settings.in_size == 1 && io_layout.get_total_in_size() == 0) {
+            return true;
+        }
         set_last_error("IOLayout input channels do not match Csound nchnls_i");
         return false;
     }
 
     return true;
 }
+
 
 void Processor::resync_audio_buffers()
 {
