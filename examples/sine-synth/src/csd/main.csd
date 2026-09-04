@@ -9,25 +9,15 @@ nchnls  =  2
 nchnls_i = 0
 0dbfs   =  1.0
 
+massign 0, main
 
 chn_k "gain", 1, 2, 0.6, 0, 1
-; chnset 0.6, "gain"
-
 chn_k "attack", 1, 2, 0.02, 0, 1
-chnset 0.6, "attack"
 chn_k "decay", 1, 2, 0.6, 0, 1
-; chnset 0.6, "decay"
-
 chn_k "sustain", 1, 2, 0.6, 0, 1
-; chnset 0.6, "sustain"
-
-
 chn_k "release", 1, 2, 0.6, 0, 1
-; chnset 0.6, "release"
 
-
-; TODO kcutOff - non-linear scale for frequencies
-        instr 1
+        instr main
 kgain chngetk "gain"
 printk2 kgain
 
