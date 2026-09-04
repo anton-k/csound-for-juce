@@ -179,7 +179,7 @@ class Processor {
     }
 
     /// Returns absolute processing time in samples (How many samples were processed so far from the call to prepare_to_play)
-    int64_t get_current_sample();
+    int64_t get_current_sample() const;
 
 
     /// Set a callback to be executed right before each Csound ksmps cycle.

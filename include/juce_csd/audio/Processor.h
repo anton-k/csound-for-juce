@@ -2,12 +2,17 @@
 
 #include <csound/csound.hpp>
 #include <string>
+#include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_csd/params/Parameters.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csd_plugin/audio/Processor.h>
+#include <csd_plugin/audio/Logger.h>
 #include <LockFreeSpscQueue.h>
 #include <array>
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace juce_csd {
 
@@ -30,7 +35,7 @@ class Processor {
   public:
     /// The processor is initialized with CSD file content, layout of IO-busses, specification of the parameters and reference to the JUCE audio processor class.
     Processor(const std::string& csd, const csd_plugin::IOLayout&, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor);
-    ~Processor() { };
+    ~Processor() = default;
 
     /// Called on main thread to prepare plugin for audio processing
     void prepareToPlay(double sampleRate, int maxBlockSize);
@@ -63,15 +68,22 @@ class Processor {
     void log(csd_plugin::LogLevel level, const char* text);
 
     std::unique_ptr<CsoundLogConsumer> create_log_consumer();
-    bool is_csound_valid() const { return csound.is_csound_valid(); }
-    std::string get_last_error() const { return csound.get_last_error(); }
+
+    bool is_csound_valid() const {
+        return csound.is_csound_valid();
+    }
+
+    std::string get_last_error() const {
+        return csound.get_last_error();
+    }
 
   private:
-    void read_midi_from_host(juce::MidiBuffer&, int);
-    void write_midi_to_host(juce::MidiBuffer&, int, int);
+    void read_midi_from_host(juce::MidiBuffer&, int64_t block_start_global_sample);
+    void write_midi_to_host(juce::MidiBuffer&, int64_t block_start_sample, int block_size);
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
     bool pop_log(LogMessage& msg);
+
     std::vector<MYFLT> host_input_scratch;
     std::vector<MYFLT> host_output_scratch;
 
@@ -83,6 +95,8 @@ class Processor {
 
     // 2. The queue manager (manages indices, prevents false sharing)
     LockFreeSpscQueue<LogMessage> log_queue;
+
+    bool was_bypassed = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Processor)
 };
