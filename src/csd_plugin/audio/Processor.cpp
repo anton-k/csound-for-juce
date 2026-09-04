@@ -2,14 +2,15 @@
 #include "csd_plugin/audio/AudioBuffer.h"
 #include "csd_plugin/audio/MidiBuffer.h"
 #include <cstdint>
-#include <juce_csd/audio/Processor.h>
 #include <csound/csound.h>
 #include <csound/csound.hpp>
 #include <memory>
 #include <vector>
 #include <algorithm>
-#include <ranges>
 #include <format>
+#include <csd_plugin/audio/Logger.h>
+#include <csd_plugin/audio/Processor.h>
+#include <thread>
 
 const double WRAP_VOLUME_LIMIT = 5.0f;
 
