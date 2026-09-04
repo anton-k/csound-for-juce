@@ -215,7 +215,7 @@ to embed the csound code (it was discussed in the previous section):
 ```
 
 Let's start with main entry point. Let's define the Porcessor h and cpp files:
-Code for `Processing.h`:
+Code for `PluginPorcessor.h`:
 
 ```cpp
 #pragma once

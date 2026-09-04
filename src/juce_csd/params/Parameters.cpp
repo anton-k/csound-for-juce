@@ -91,6 +91,7 @@ Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spe
     init_int_audio_parameters(processor, spec.audio_ints);
     init_ui_parameters(spec.ui);
     init_sensor_parameters(spec.sensor);
+    init_host_parameters(spec.host);
 }
 
 juce::AudioParameterFloat& Parameters::get_float_audio_parameter_ref(const std::string& id) {
