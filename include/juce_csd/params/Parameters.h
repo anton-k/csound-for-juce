@@ -292,7 +292,7 @@ struct HostParam {
 
 struct SensorParam {
   SensorParam(Csound* csound, const std::string& id, std::atomic<float>& value_ref_):
-    value_ref(value_ref_), param(csound, id, 0.0)
+    value_ref(value_ref_), param(csound, id, value_ref_.load())
   {}
 
   void update() {
