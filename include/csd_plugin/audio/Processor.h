@@ -27,8 +27,9 @@ struct CsoundSettings {
 
 /// Layout of the IO-busses. How many inputs/outputs. Does it have MIDI or side-chain.
 struct IOLayout {
-    IOLayout() {};
+    IOLayout() = default;
     IOLayout(const IOLayout&) = default;
+    IOLayout& operator=(const IOLayout&) = default;
 
     bool has_midi_in {false}; ///< Has MIDI input
     bool has_midi_out {false}; ///< Has MIDI output

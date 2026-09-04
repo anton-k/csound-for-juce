@@ -61,6 +61,400 @@ and distribute with the plugin
 
 Bugs/inconsistencies:
 
+## 1. High-priority bugs / likely functional defects
+
+### 1.1 Choice parameters have inconsistent 0-based / 1-based semantics
+
+**Files:**
+
+- `include/juce_csd/params/Parameters.h`
+- `src/juce_csd/params/Parameters.cpp`
+- `src/juce_csd/params/JsonSerializer.cpp`
+- QuickStart guide / examples
+
+The documentation says choice values sent to Csound are **1-based**, with `0` reserved as “nothing selected”.
+
+But the code uses JUCE’s `AudioParameterChoice`, which is normally **0-based**.
+
+Example:
+
+```cpp
+auto* param = new juce::AudioParameterChoice(
+    spec.id,
+    spec.name,
+    spec.choices,
+    spec.default_value
+);
+```
+
+If `spec.default_value` is intended to be 1-based, this is wrong because JUCE expects a 0-based default index.
+
+Also:
+
+```cpp
+audio_parameter.cached.set_value(static_cast<double>(param->getIndex()));
+```
+
+This sends `0` for the first choice, but the docs say Csound expects `1`.
+
+Serialization also stores:
+
+```cpp
+json_data["audio"][pair.first] = pair.second->getIndex();
+```
+
+Again, this is 0-based.
+
+**Impact:**
+
+- First menu item may map to Csound value `0` instead of `1`.
+- Default choice may be wrong.
+- Saved state may restore the wrong choice.
+- UI combo box IDs, JUCE index, and Csound channel values can disagree.
+
+**Recommended convention:**
+
+Keep JUCE internally 0-based, but send Csound 1-based values.
+
+For example:
+
+```cpp
+int defaultIndex = juce::jlimit(0, spec.choices.size() - 1, spec.default_value - 1);
+
+auto* param = new juce::AudioParameterChoice(
+    spec.id,
+    spec.name,
+    spec.choices,
+    defaultIndex
+);
+```
+
+Then when writing to Csound:
+
+```cpp
+audio_parameter.cached.set_value(static_cast<double>(param->getIndex() + 1));
+```
+
+Serialization should probably store the 1-based Csound value too:
+
+```cpp
+json_data["audio"][pair.first] = pair.second->getIndex() + 1;
+```
+
+And deserialize by converting back:
+
+```cpp
+int csoundValue = audio_json[id].get<int>();
+int juceIndex = juce::jlimit(0, param_ptr->choices.size() - 1, csoundValue - 1);
+```
+
+This needs to be made explicit in the docs.
+
+---
+
+### 1.2 MIDI input timestamps use the wrong coordinate system
+
+**Files:**
+
+- `src/juce_csd/audio/Processor.cpp`
+- `src/csd_plugin/audio/Processor.cpp`
+
+In `juce_csd::Processor::processBlock`:
+
+```cpp
+const int block_start_global_sample = csound.get_current_sample();
+...
+read_midi_from_host(host_midi_buffer);
+```
+
+But `read_midi_from_host` pushes events using the host-relative sample position:
+
+```cpp
+csound.get_midi_buffers().in().push(
+    csd_plugin::RawMidiEvent(
+        metadata.samplePosition,
+        msg.getRawData(),
+        msg.getRawDataSize()
+    )
+);
+```
+
+However, inside `csd_plugin::Processor::midi_read`, events are compared against a global cycle position:
+
+```cpp
+int cycle_end_sample = proc->current_cycle_end_sample;
+
+if (next_event.samplePosition < cycle_end_sample) {
+    ...
+}
+```
+
+`current_cycle_end_sample` is based on `current_sample`, which is a running global counter.
+But `metadata.samplePosition` is relative to the current host block, usually `0..blockSize - 1`.
+
+**Impact:**
+
+MIDI event timing is likely wrong. For example, after the plugin has been running for a while, all host MIDI events may have timestamps near `0`, while `current_cycle_end_sample` may be millions. They may all be consumed immediately, losing sample-accurate timing.
+
+**Fix direction:**
+
+Convert host MIDI positions to the processor’s global time before pushing them:
+
+```cpp
+read_midi_from_host(host_midi_buffer, block_start_global_sample);
+```
+
+Then:
+
+```cpp
+int32_t globalPos = blockStartGlobalSample + metadata.samplePosition;
+
+csound.get_midi_buffers().in().push(
+    csd_plugin::RawMidiEvent(globalPos, msg.getRawData(), msg.getRawDataSize())
+);
+```
+
+You should also decide whether `current_sample` should be `int64_t`, because `int` can overflow in long sessions.
+
+---
+
+### 1.3 MIDI output scheduling may also be incorrect
+
+**File:** `src/juce_csd/audio/Processor.cpp`
+
+`write_midi_to_host` reads all output MIDI events and clamps them into the current block:
+
+```cpp
+int relative_pos = csd_midi_event.samplePosition - block_start_sample;
+relative_pos = std::clamp(relative_pos, 0, block_size - 1);
+host_midi_messages.addEvent(juce_midi_event, relative_pos);
+```
+
+If Csound generates events ahead of time because the internal FIFO runs ahead of the host block, those events may belong to a future host block. Clamping them to the current block can destroy timing.
+
+**Impact:**
+
+- MIDI events may be emitted too early.
+- Multiple future events may be collapsed onto the end of the current block.
+- Synth timing may become unstable for block sizes that are not multiples of `ksmps`.
+
+**Better approach:**
+
+Maintain a global MIDI timestamp model and only emit events whose timestamp falls inside the current host block:
+
+```cpp
+if (event.globalPosition >= blockStart && event.globalPosition < blockStart + blockSize) {
+    emit event;
+} else if (event.globalPosition >= blockStart + blockSize) {
+    leave event in queue for next block;
+}
+```
+
+This requires changing `RawMidiEvent::samplePosition` to a larger integer type, probably `int64_t`.
+
+---
+
+### 1.4 Audio FIFO cycle calculation can request more input than available
+
+**File:** `src/csd_plugin/audio/Processor.cpp`
+
+This function decides how many Csound cycles to run:
+
+```cpp
+int target_frames = block_size + ksmps;
+```
+
+Then it may run enough cycles to produce `block_size + ksmps` output frames.
+
+For effects with audio input, each Csound cycle also consumes `ksmps * in_size` input samples.
+
+If `block_size` is not a multiple of `ksmps`, or if `block_size < ksmps`, the processor may try to consume more input samples than the host provided in the current block.
+
+Example:
+
+- `ksmps = 64`
+- `block_size = 100`
+- output prefill = `64`
+- target = `164`
+- cycles needed = `2`
+- input consumed = `128`
+- input written by host = `100`
+
+So the second Csound cycle underflows the input FIFO.
+
+The code currently does this:
+
+```cpp
+bool read_success = audio_buffers.in().read_block(spin, ksmps * in_size);
+
+if (!read_success) {
+    std::memset(spin, 0, ksmps * in_size * sizeof(double));
+}
+```
+
+But `FastFifo::read_block` fails atomically: if there are not enough samples, it consumes nothing.
+
+So if 36 samples are available and 64 are requested, the 36 samples remain in the FIFO, the current Csound cycle is filled with silence, and those 36 samples are used later, potentially causing time misalignment.
+
+**Impact:**
+
+- Silence or glitches when block size is not a multiple of `ksmps`.
+- Possible latency drift.
+- Input samples may be delayed by one or more Csound cycles.
+- Behavior may depend heavily on host block size.
+
+**Suggested fixes:**
+
+You need a deliberate FIFO/latency strategy.
+
+At minimum:
+
+1. Do not silently discard or strand partial input data.
+2. Either limit Csound cycles by available input, or implement partial reads.
+3. Rethink the `block_size + ksmps` target margin.
+
+A safer read pattern would be:
+
+```cpp
+int needed = ksmps * in_size;
+int available = audio_buffers.in().get_size();
+int to_read = std::min(needed, available);
+
+audio_buffers.in().read_block(spin, to_read);
+std::fill(spin + to_read, spin + needed, 0.0);
+```
+
+But this is only a partial mitigation. The real issue is that the number of Csound cycles, input consumption, output prefill, latency reporting, and MIDI timestamps need to be coordinated as one timing model.
+
+---
+
+### 1.6 `prepareToPlay` does not check whether Csound initialization succeeded
+
+**File:** `src/juce_csd/audio/Processor.cpp`
+
+Current code:
+
+```cpp
+void Processor::prepareToPlay(double sample_rate, int max_block_size)
+{
+    csound.prepare_to_play(static_cast<int>(std::round(sample_rate)), max_block_size);
+    parameters.prepare(csound.get_csound(), sample_rate, max_block_size);
+
+    int ksmps = csound.get_csound_settings().ksmps;
+    csound.set_krate_callback([this, ksmps]() {
+        parameters.update_krate_params(ksmps);
+    });
+}
+```
+
+If Csound compilation fails, `csound.is_ready_to_play()` will be false, but this function still calls:
+
+```cpp
+parameters.prepare(csound.get_csound(), sample_rate, max_block_size);
+```
+
+Depending on Csound’s internal state, this may be unsafe or may simply produce useless channel pointers. More importantly, the plugin continues as if preparation succeeded.
+
+**Fix:**
+
+```cpp
+csound.prepare_to_play(...);
+
+if (!csound.is_ready_to_play()) {
+    return;
+}
+
+parameters.prepare(...);
+csound.set_krate_callback(...);
+```
+
+Also consider propagating the error to JUCE via logging or `ErrorBanner`.
+
+---
+
+### 1.7 Bypass behavior is too abrupt
+
+**File:** `src/juce_csd/audio/Processor.cpp`
+
+Current bypass handling:
+
+```cpp
+if (is_bypassed || !csound.is_ready_to_play()) {
+    buffer.clear();
+    host_midi_buffer.clear();
+    return;
+}
+```
+
+For an effect, clearing the buffer is usually not true bypass. It will silence the output and can cause clicks.
+
+Also, when bypassed, Csound processing stops, so `current_sample` stops advancing. When bypass is disabled again, Csound time may no longer match host time.
+
+**Impact:**
+
+- Clicks/pops on bypass toggle.
+- Loss of dry signal.
+- MIDI/timing desync after bypass.
+- Envelopes or Csound score time may stop.
+
+**Better behavior:**
+
+For effect plugins:
+
+- crossfade between processed and dry signal;
+- or pass dry audio through while keeping Csound state alive;
+- or reset/resync Csound when leaving bypass.
+
+For synth plugins:
+
+- bypass may mean silence, but parameter smoothing and voice release still need consideration.
+
+This matches the roadmap item about smooth bypass.
+
+---
+
+### 1.8 Bus layout validation ignores sidechain buses
+
+**File:** `src/juce_csd/plugin/PluginProcessor.cpp`
+
+Current:
+
+```cpp
+return (
+    layouts.getMainOutputChannelSet().size() == layout.get_out_size()
+ && (
+        layouts.getMainInputChannelSet().size() == layout.get_total_in_size()
+     || layouts.getMainInputChannelSet().size() == layout.in_size
+    )
+);
+```
+
+This does not explicitly validate the sidechain bus.
+
+If `IOLayout` has a sidechain, JUCE may have a separate sidechain input bus. The current check may accept layouts where the sidechain is missing, or where sidechain channels are incorrectly treated as main input channels.
+
+**Better logic:**
+
+```cpp
+const auto mainIn = layouts.getMainInputChannelSet().size();
+const auto scIn = layouts.getSidechainInputChannelSet().size();
+const auto out = layouts.getMainOutputChannelSet().size();
+
+if (layout.sidechain_size > 0) {
+    return out == layout.out_size
+        && mainIn == layout.in_size
+        && scIn == layout.sidechain_size;
+}
+
+return out == layout.out_size
+    && mainIn == layout.in_size
+    && scIn == 0;
+```
+
+Standalone behavior may need special handling because standalone apps often do not have sidechain inputs.
+
+---
+
 ### 2.6 Last-error buffer can be read while being modified
 
 **File:** `include/csd_plugin/audio/Processor.h`
@@ -357,6 +751,75 @@ Then MIDI input/output and audio FIFO management can use one source of truth.
 
 ---
 
+### 4.3 Add explicit validation results
+
+Instead of only returning `bool` from setup functions, consider:
+
+```cpp
+juce::Result prepareToPlay(...);
+```
+
+or:
+
+```cpp
+std::expected<void, std::string> setupCsound(...);
+```
+
+This would make error handling cleaner.
+
+---
+
+
+### 4.4 Make bypass behavior configurable
+
+Different plugin types need different bypass behavior.
+
+Possible modes:
+
+```cpp
+enum class BypassMode {
+    HardBypass,
+    DryThrough,
+    Crossfade,
+    TailOnly
+};
+```
+
+For FX plugins, crossfade/dry-through is usually best.
+
+---
+
+
+### 4.5 Add parameter validation against Csound channels
+
+You already retrieve channel names:
+
+```cpp
+void CsoundSettings::set_channel_names(Csound* csound);
+```
+
+Use this to validate the `ParameterSpec`.
+
+For example:
+
+```cpp
+std::vector<std::string> validateParameters(
+    const ParameterSpec& spec,
+    const CsoundSettings& settings
+);
+```
+
+Return warnings/errors such as:
+
+```text
+Audio parameter 'mix' has no matching Csound input control channel.
+Sensor parameter 'level' has no matching Csound output control channel.
+Choice parameter 'mode' has empty choice list.
+```
+
+This directly addresses the roadmap item about parameter spec validation.
+
+---
 
 
 
