@@ -112,6 +112,8 @@ class Processor {
       csd_file_content(csd),
       io_layout(io_layout_) {};
     ~Processor() {
+      log_callback = nullptr;
+      krate_callback = nullptr;
       release_resources();
       csound.reset();
     };

@@ -438,7 +438,7 @@ void Parameters::update_krate_params(int ksmps) {
 
 void Parameters::getStateInformation (juce::MemoryBlock& destData)
 {
-    juce::MemoryOutputStream ooutput_stream{destData, true};
+    juce::MemoryOutputStream ooutput_stream{destData, false};
     JsonSerializer::serialize(parameter_spec_map, audio_parameters, ui_parameters, ooutput_stream);
 }
 

@@ -268,6 +268,8 @@ void Processor::process_block(int block_size)
 }
 
 void Processor::release_resources() {
+    ready_to_play = false;
+
     if (csound == nullptr) {
         return;
     }
@@ -276,9 +278,8 @@ void Processor::release_resources() {
         std::this_thread::yield();
     }
 
-    ready_to_play = false;
-
     csound->SetHostData(nullptr);
+    krate_callback = nullptr;
     log_callback = nullptr;
     csound.reset();
 
