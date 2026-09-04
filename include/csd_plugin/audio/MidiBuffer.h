@@ -6,18 +6,20 @@
 
 namespace csd_plugin {
 
+inline constexpr int MIDI_DATA_SIZE = 4;
+
 /// Raw midi event
 struct RawMidiEvent {
     int64_t samplePosition;  // Timestamp relative to the start of the current audio block
     uint8_t size;            // Number of valid bytes (1 to 3 for standard MIDI)
-    uint8_t data[4];         // Raw MIDI bytes (padded to 4 bytes for perfect 32-bit memory alignment)
+    uint8_t data[MIDI_DATA_SIZE];         // Raw MIDI bytes (padded to 4 bytes for perfect 32-bit memory alignment)
 
     // Default constructor
     RawMidiEvent() : samplePosition(0), size(0), data{0, 0, 0, 0} {}
 
     // Constructor from raw bytes
     RawMidiEvent(int32_t pos, const uint8_t* rawData, uint8_t rawDataSize)
-        : samplePosition(pos), size(rawDataSize > 4 ? 4 : rawDataSize)
+        : samplePosition(pos), size(rawDataSize > MIDI_DATA_SIZE ? MIDI_DATA_SIZE : rawDataSize)
     {
         // Fast, zero-allocation copy.
         // We cap at 4 bytes to silently ignore SysEx and guarantee RT-safety.

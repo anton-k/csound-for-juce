@@ -160,7 +160,14 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
     Processor *processor = static_cast<Processor *>(csound_host_data);
     if (!processor || !(processor->get_io_layout().has_midi_out)) return 0;
 
-    csd_plugin::RawMidiEvent midi_event{processor->get_current_sample(), midi_buffer, static_cast<uint8_t>(midi_buffer_size)};
+    const uint8_t safeSize = static_cast<uint8_t>(std::min(midi_buffer_size, MIDI_DATA_SIZE));
+
+    csd_plugin::RawMidiEvent midi_event{
+        processor->get_current_sample(),
+        midi_buffer,
+        safeSize
+    };
+
     processor->midi_buffers.out().push(midi_event);
     return 0;
 }
