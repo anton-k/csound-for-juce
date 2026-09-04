@@ -7,74 +7,90 @@ namespace csd_plugin {
 
 /// Audio buffer for real-time queue. Audio buffer is used to read and write
 // samples from the DAW, and read/write the samples to Csound for audio processing.
+template <typename Sample>
 class AudioBuffer {
-  public:
-    AudioBuffer(int capacity):
-      queue(capacity),
-      current_capacity(capacity)
-    {}
+public:
+    AudioBuffer() = default;
 
-    /// Writes sample to buffer
-    bool write(double);
-    bool write_block(const double* data, int num_items);
+    explicit AudioBuffer(int capacity) {
+        reset(capacity);
+    }
 
-    /// Reads sample from buffer
-    bool read(double&);
-    bool read_block(double* dest, int num_items);
+    bool write(Sample sample) {
+        return queue.push(sample);
+    }
 
-    /// Clears the buffer
-    void clear();
+    bool read(Sample& sample) {
+        return queue.read(sample);
+    }
 
-    /// Returns the size of the buffer (how many samples are in the buffer to read)
-    int get_size();
+    bool write_block(const Sample* data, int num_items) {
+        return queue.write_block(data, num_items);
+    }
 
-    /// Returns total size of the buffer. How many samples it can hold in total.
-    int get_capacity();
+    bool read_block(Sample* dest, int num_items) {
+        return queue.read_block(dest, num_items);
+    }
 
-    /// Resets the buffer to the new capacity
-    void reset(int capacity);
+    int read_block_partial(Sample* dest, int num_items) {
+        return queue.read_block_partial(dest, num_items);
+    }
 
-    int get_free_space() { return queue.get_free_space(); }
+    int get_size() const {
+        return queue.get_size();
+    }
 
-    int read_block_partial(double* dest, int num_items);
+    int get_capacity() const {
+        return queue.get_capacity();
+    }
 
-  private:
-    FastFifo<double> queue;
-    std::atomic<int> current_capacity{0};
+    int get_free_space() const {
+        return queue.get_free_space();
+    }
+
+    void clear() {
+        queue.clear();
+    }
+
+    void reset(int capacity) {
+        queue.reset(capacity);
+    }
+
+private:
+    FastFifo<Sample> queue;
 };
 
+
 /// Class for audio buffers (input and output buffers).
+template <typename Sample>
 class AudioBuffers {
-  public:
-    AudioBuffers();
+public:
+    AudioBuffers() = default;
 
-    /// Creates audio buffers with the same size for input and output buffers
-    AudioBuffers(int size): AudioBuffers(size, size) {};
+    AudioBuffers(int in_size, int out_size)
+        : input_buffer(in_size), output_buffer(out_size) {}
 
-    /// Provides different values for input and output size of the audio buffer
-    AudioBuffers(int in_size, int out_size): input_buffer(in_size), output_buffer(out_size) {};
-
-    /// resets the capacities for the buffers to the new values. All values are cleared from the buffers
     void reset(int in_size, int out_size) {
-      input_buffer.reset(in_size);
-      output_buffer.reset(out_size);
-    };
+        input_buffer.reset(in_size);
+        output_buffer.reset(out_size);
+    }
 
-    /// Clear both input and output buffers
     void clear() {
-      input_buffer.clear();
-      output_buffer.clear();
-    };
+        input_buffer.clear();
+        output_buffer.clear();
+    }
 
-    /// Get reference to the input buffer
-    AudioBuffer& in() { return input_buffer; };
+    AudioBuffer<Sample>& in() {
+        return input_buffer;
+    }
 
-    /// Get reference to the output buffer
-    AudioBuffer& out() { return output_buffer; };
+    AudioBuffer<Sample>& out() {
+        return output_buffer;
+    }
 
-  private:
-    AudioBuffer input_buffer;
-    AudioBuffer output_buffer;
+private:
+    AudioBuffer<Sample> input_buffer;
+    AudioBuffer<Sample> output_buffer;
 };
 
 }

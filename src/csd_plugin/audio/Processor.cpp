@@ -1,6 +1,7 @@
 
 #include "csd_plugin/audio/AudioBuffer.h"
 #include "csd_plugin/audio/MidiBuffer.h"
+#include <csound/sysdep.h>
 #include <cstdint>
 #include <csound/csound.h>
 #include <csound/csound.hpp>
@@ -13,18 +14,25 @@
 #include <thread>
 #include <cstring>
 
-const double WRAP_VOLUME_LIMIT = 5.0f;
 
 namespace csd_plugin {
 
 namespace {
 
-double wrap_limiter(double sample) {
-    if (std::isnan(sample) || std::isinf(sample)) {
-        return 0.0; // RT-safe NaN/Inf protection
+inline MYFLT wrap_limiter(MYFLT sample)
+{
+    if (!std::isfinite(static_cast<double>(sample)))
+    {
+        return MYFLT{0};
     }
-    return std::clamp(sample, -WRAP_VOLUME_LIMIT, WRAP_VOLUME_LIMIT);
+
+    return std::clamp(
+        sample,
+        -WRAP_VOLUME_LIMIT,
+        WRAP_VOLUME_LIMIT
+    );
 }
+
 
 
 bool is_control_channel_type(controlChannelInfo_t info) {
@@ -59,12 +67,12 @@ void CsoundSettings::prepare(Csound* csound) {
     out_size = static_cast<size_t>(csound->GetChannels(0));
     in_size = static_cast<size_t>(csound->GetChannels(1));
     sample_rate = csound->GetSr();
-    zero_dbfs = csound->Get0dBFS();
-    if (zero_dbfs < 0.01) {
-        zero_dbfs = 1.f;
-        inverse_zero_dbfs = 1.f;
+    zero_dbfs = static_cast<MYFLT>(csound->Get0dBFS());
+    if (zero_dbfs < static_cast<MYFLT>(0.01)) {
+        zero_dbfs = static_cast<MYFLT>(1.f);
+        inverse_zero_dbfs = static_cast<MYFLT>(1.f);
     } else {
-        inverse_zero_dbfs = 1.f / zero_dbfs;
+        inverse_zero_dbfs = static_cast<MYFLT>(1.f) / zero_dbfs;
     }
     set_channel_names(csound);
 }
@@ -91,11 +99,11 @@ int Processor::get_latency_samples() {
     return io_layout.extra_latency_samples + csound_processing_latency;
 }
 
-void Processor::write_input(double sample) {
+void Processor::write_input(MYFLT sample) {
     audio_buffers.in().write(csound_settings.zero_dbfs * sample);
 }
 
-bool Processor::read_output(double& sample) {
+bool Processor::read_output(MYFLT& sample) {
     bool read_success = audio_buffers.out().read(sample);
 
     if (!read_success) {
@@ -230,12 +238,12 @@ void Processor::prepare_to_play(int sample_rate, int max_block_size)
     if (!ready_to_play) {
         return;
     }
-
+/*
     if (!validate_io_layout()) {
         ready_to_play = false;
         return;
     }
-
+*/
     prepare_audio_buffers(max_block_size);
 
     current_sample = 0;
@@ -354,45 +362,71 @@ int Processor::get_csound_cycle_size(int block_size)
     return ceil_div(missing_frames, ksmps);
 }
 
-void Processor::csound_process(int buffer_size) {
-    csound_cycle_size = get_csound_cycle_size(buffer_size);
-    int in_size = io_layout.get_total_in_size();
-    int out_size = io_layout.get_out_size();
-    int ksmps = csound_settings.ksmps;
 
-    for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
+void Processor::csound_process(int block_size)
+{
+    const int in_size = io_layout.get_total_in_size();
+    const int out_size = io_layout.get_out_size();
+    const int ksmps = csound_settings.ksmps;
 
-        // Prevent output FIFO overflow
-        if (audio_buffers.out().get_free_space() < (ksmps * out_size)) {
+    if (block_size <= 0 || out_size <= 0 || ksmps <= 0)
+        return;
+
+    const int in_cycle_samples = ksmps * in_size;
+    const int out_cycle_samples = ksmps * out_size;
+
+    csound_cycle_size = get_csound_cycle_size(block_size);
+
+    for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index)
+    {
+        if (audio_buffers.out().get_free_space() < out_cycle_samples)
+        {
+            set_last_error("Csound output FIFO overflow risk; resyncing");
+            log(LogLevel::Error, "Csound output FIFO overflow risk; resyncing");
+            resync_audio_buffers();
             break;
         }
 
         current_cycle_end_sample = current_sample + ksmps;
 
-        if (in_size > 0) {
-            double* spin = csound->GetSpin();
-            bool read_success = audio_buffers.in().read_block(spin, ksmps * in_size);
+        if (in_size > 0)
+        {
+            MYFLT* spin = csound->GetSpin();
 
-            // If input underflows, pad with silence to maintain perfect time-sync
-            if (!read_success) {
-                std::memset(spin, 0, ksmps * in_size * sizeof(double));
-            }
+            const int was_read =
+                audio_buffers.in().read_block_partial(spin, in_cycle_samples);
+
+            std::fill(
+                spin + was_read,
+                spin + in_cycle_samples,
+                MYFLT{0}
+            );
         }
 
-        if (krate_callback) {
+        if (krate_callback)
+        {
             krate_callback();
         }
 
         csound->PerformKsmps();
 
-        const double* spout = csound->GetSpout();
+        const MYFLT* spout = csound->GetSpout();
 
-        // This will now always succeed because we checked free space above
-        audio_buffers.out().write_block(spout, ksmps * out_size);
+        const bool write_success =
+            audio_buffers.out().write_block(spout, out_cycle_samples);
+
+        if (!write_success)
+        {
+            set_last_error("Csound output FIFO write failed; resyncing");
+            resync_audio_buffers();
+            break;
+        }
 
         current_sample = current_cycle_end_sample;
     }
 }
+
+
 
 void Processor::clear_buffers() {
     audio_buffers.clear();

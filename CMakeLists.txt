@@ -39,7 +39,6 @@ find_library(CSOUND_LIB csound64 REQUIRED)
 add_library(juce_csd STATIC)
 
 target_sources(juce_csd PRIVATE
-    src/csd_plugin/audio/AudioBuffer.cpp
     src/csd_plugin/audio/MidiBuffer.cpp
     src/csd_plugin/audio/Processor.cpp
 

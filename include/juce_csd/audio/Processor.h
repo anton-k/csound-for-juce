@@ -72,6 +72,8 @@ class Processor {
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
     bool pop_log(LogMessage& msg);
+    std::vector<MYFLT> host_input_scratch;
+    std::vector<MYFLT> host_output_scratch;
 
     csd_plugin::Processor csound;
     Parameters parameters;

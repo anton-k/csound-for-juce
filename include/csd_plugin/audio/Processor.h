@@ -12,6 +12,8 @@
 
 namespace csd_plugin {
 
+inline constexpr MYFLT WRAP_VOLUME_LIMIT = static_cast<MYFLT>(5.0f);
+
 /// Settings for Csound file
 struct CsoundSettings {
     CsoundSettings();
@@ -21,7 +23,7 @@ struct CsoundSettings {
     int sample_rate{44100};
     int out_size{2};
     int in_size{0};
-    double zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
+    MYFLT zero_dbfs{1.0}, inverse_zero_dbfs{1.0};
     std::vector<std::string> channel_names;
 };
 
@@ -145,11 +147,11 @@ class Processor {
 
     /// Writes sample to the input audio buffer. Use it prior to process_block to read
     // all samples from the host
-    void write_input(double sample);
+    void write_input(MYFLT sample);
 
     /// Reads sample from the output audio buffer. Use it after process_block to read
     // read sampels processed with Csound and write them to the host.
-    bool read_output(double& sample);
+    bool read_output(MYFLT& sample);
 
     /// Is Csound ready to play
     bool is_ready_to_play() {
@@ -162,7 +164,7 @@ class Processor {
     }
 
     /// Returns audio buffers
-    AudioBuffers& get_audio_buffers() {
+    AudioBuffers<MYFLT>& get_audio_buffers() {
       return audio_buffers;
     }
 
@@ -251,7 +253,7 @@ class Processor {
 
     std::unique_ptr<Csound> csound;
     CsoundSettings csound_settings{};
-    AudioBuffers audio_buffers{0};
+    AudioBuffers<MYFLT> audio_buffers{0, 0};
     MidiBuffers midi_buffers{1024, 1024};
     int csound_cycle_size{0};
     int64_t current_sample{0};

@@ -38,6 +38,12 @@ Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLa
 
 void Processor::prepareToPlay (double sample_rate, int max_block_size)
 {
+    const int in_channels = csound.get_io_layout().get_total_in_size();
+    const int out_channels = csound.get_io_layout().get_out_size();
+
+    host_input_scratch.resize(static_cast<size_t>(max_block_size) * in_channels);
+    host_output_scratch.resize(static_cast<size_t>(max_block_size) * out_channels);
+
     csound.prepare_to_play(static_cast<int>(std::round(sample_rate)),  max_block_size);
     parameters.prepare(csound.get_csound(), sample_rate);
 
@@ -96,49 +102,103 @@ int Processor::get_latency_samples() {
     return csound.get_latency_samples();
 }
 
-void Processor::read_input_buffer_from_host(juce::AudioBuffer<float>& buffer) {
-    int csd_in_size = csound.get_io_layout().get_total_in_size();
-    if (csd_in_size > 0) {
-        int host_in_size = buffer.getNumChannels();
-        int sample_size = buffer.getNumSamples();
+void Processor::read_input_buffer_from_host(juce::AudioBuffer<float>& buffer)
+{
+    const int csd_in_size = csound.get_io_layout().get_total_in_size();
 
-        for (int sample_index = 0; sample_index < sample_size; ++sample_index) {
-            for (int channel_index = 0; channel_index < csd_in_size; ++channel_index) {
-                if (channel_index < host_in_size) {
-                    csound.write_input(static_cast<double>(buffer.getSample(channel_index, sample_index)));
-                } else {
-                    csound.write_input(0.f); // Pad missing host channels with zeroes
-                }
+    if (csd_in_size <= 0)
+        return;
+
+    const int host_channels = buffer.getNumChannels();
+    const int num_frames = buffer.getNumSamples();
+    const int total_samples = num_frames * csd_in_size;
+
+    MYFLT* dest = host_input_scratch.data();
+
+    const MYFLT scale =
+        static_cast<MYFLT>(csound.get_csound_settings().zero_dbfs);
+
+    for (int frame = 0; frame < num_frames; ++frame)
+    {
+        for (int ch = 0; ch < csd_in_size; ++ch)
+        {
+            float sample = 0.0f;
+
+            if (ch < host_channels)
+            {
+                sample = buffer.getSample(ch, frame);
             }
+
+            *dest++ = static_cast<MYFLT>(sample) * scale;
         }
     }
 
+    csound.get_audio_buffers().in().write_block(
+        host_input_scratch.data(),
+        total_samples
+    );
 }
 
-void Processor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer) {
-    int csd_out_size = csound.get_io_layout().get_out_size();
-    int host_out_size = buffer.getNumChannels();
-    int sample_size = buffer.getNumSamples();
-    int max_channels = std::max(csd_out_size, host_out_size);
 
-    double sample{0.0};
-    bool read_success;
-    for (int sample_index = 0; sample_index < sample_size; ++sample_index) {
-        for (int channel_index = 0; channel_index < max_channels; ++channel_index) {
-            if (channel_index < csd_out_size) {
-                read_success = csound.read_output(sample);
-                if (!read_success) {
-                    sample = 0.0; // Fallback to silence on underflow
-                }
-            } else {
-                sample = 0.0;
+void Processor::write_output_buffer_to_host(juce::AudioBuffer<float>& buffer)
+{
+    const int csd_out_size = csound.get_io_layout().get_out_size();
+
+    if (csd_out_size <= 0)
+        return;
+
+    const int host_channels = buffer.getNumChannels();
+    const int num_frames = buffer.getNumSamples();
+    const int total_samples = num_frames * csd_out_size;
+
+    MYFLT* src = host_output_scratch.data();
+
+    const bool read_success =
+        csound.get_audio_buffers().out().read_block(src, total_samples);
+
+    if (!read_success)
+    {
+        buffer.clear();
+        return;
+    }
+
+    const MYFLT inverse_scale =
+        static_cast<MYFLT>(csound.get_csound_settings().inverse_zero_dbfs);
+
+    for (int frame = 0; frame < num_frames; ++frame)
+    {
+        for (int ch = 0; ch < csd_out_size; ++ch)
+        {
+            MYFLT sample = *src++;
+
+            sample *= inverse_scale;
+
+            if (!std::isfinite(static_cast<double>(sample)))
+            {
+                sample = MYFLT{0};
             }
-            if (channel_index < host_out_size) {
-                buffer.setSample(channel_index, sample_index, static_cast<float>(sample));
+            else
+            {
+                sample = std::clamp(
+                    sample,
+                    -csd_plugin::WRAP_VOLUME_LIMIT,
+                    csd_plugin::WRAP_VOLUME_LIMIT
+                );
             }
+
+            if (ch < host_channels)
+            {
+                buffer.setSample(ch, frame, static_cast<float>(sample));
+            }
+        }
+
+        for (int ch = csd_out_size; ch < host_channels; ++ch)
+        {
+            buffer.setSample(ch, frame, 0.0f);
         }
     }
 }
+
 
 void Processor::read_midi_from_host(juce::MidiBuffer& host_midi_messages, int block_start_global_sample) {
     if (csound.get_io_layout().has_midi_in) {
