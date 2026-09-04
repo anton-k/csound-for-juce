@@ -195,8 +195,8 @@ void Parameters::init_sensor_parameters(const std::vector<SensorParameterSpec>& 
     }
 }
 
-void Parameters::prepare(Csound* csound, double sample_rate, int max_block_size) {
-  prepare_cached_audio_parameters(csound, sample_rate, max_block_size);
+void Parameters::prepare(Csound* csound, double sample_rate) {
+  prepare_cached_audio_parameters(csound, sample_rate);
   prepare_cached_host_parameters(csound);
   prepare_sensor_parameters(csound);
   prepare_krate_counter(csound, sample_rate);
@@ -210,7 +210,7 @@ void Parameters::prepare_krate_counter(Csound* csound, double sample_rate) {
 }
 
 // TODO: do not put in cache paraeters with nullptr as prameter.ptr
-void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size) {
+void Parameters::prepare_cached_audio_parameters(Csound* csound, double sample_rate) {
     cached_smoothed_audio_parameters.clear();
     cached_discrete_audio_parameters.clear();
 
@@ -257,11 +257,15 @@ void Parameters::prepare_sensor_parameters(Csound* csound) {
   }
 }
 
-void Parameters::update_on_process(juce::AudioPlayHead* play_head) {
+void Parameters::update_inputs(juce::AudioPlayHead* play_head) {
   update_audio_params();
-  update_sensor_params();
   update_host_params(play_head);
 }
+
+void Parameters::update_outputs() {
+  update_sensor_params();
+}
+
 
 void Parameters::update_audio_params() {
   update_smoothed_audio_params();

@@ -295,7 +295,9 @@ struct SensorParam {
   {}
 
   void update() {
-    value_ref.store(param.get_value());
+    float v = static_cast<float>(param.get_value());
+    if (!std::isfinite(v)) v = 0.0f;
+    value_ref.store(v);
   }
 
   std::atomic<float>& value_ref;
@@ -308,10 +310,11 @@ class Parameters {
     Parameters(juce:: AudioProcessor&, const ParameterSpec&);
 
     /// Method is called on prepareToPlay phase of the plugin
-    void prepare(Csound* csound, double sample_rate, int max_block_size);
+    void prepare(Csound* csound, double sample_rate);
 
     /// Set audio parameters to Csound and read sensor parameters from Csound
-    void update_on_process(juce::AudioPlayHead* play_head);
+    void update_inputs(juce::AudioPlayHead* play_head);
+    void update_outputs();
 
     /// Performs krate smoothing of float audio parameters
     void update_krate_params(int ksmps);
@@ -345,7 +348,7 @@ class Parameters {
     std::optional<float> get_sensor_parameter(const std::string& id);
 
   private:
-    void prepare_cached_audio_parameters(Csound* csound, double sample_rate, int max_block_size);
+    void prepare_cached_audio_parameters(Csound* csound, double sample_rate);
     void prepare_cached_host_parameters(Csound* csound);
     void prepare_sensor_parameters(Csound* csound);
     void prepare_krate_counter(Csound* csound, double sample_rate);
@@ -376,7 +379,6 @@ class Parameters {
     std::vector<HostParam> cached_host_parameters{};
     std::vector<SensorParam> sensor_parameter_ptrs{};
     ParameterSpecMap parameter_spec_map;
-    std::vector<AudioParam> smoothed_float_ptrs{};
     int krate_divider = 1;
     int krate_counter = 0;
 

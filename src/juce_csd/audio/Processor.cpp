@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
+#include <cstring>
 
 namespace juce_csd {
 
@@ -38,7 +39,7 @@ Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLa
 void Processor::prepareToPlay (double sample_rate, int max_block_size)
 {
     csound.prepare_to_play(static_cast<int>(std::round(sample_rate)),  max_block_size);
-    parameters.prepare(csound.get_csound(), sample_rate, max_block_size);
+    parameters.prepare(csound.get_csound(), sample_rate);
 
     // Bind the k-rate callback
     int ksmps = csound.get_csound_settings().ksmps;
@@ -80,8 +81,9 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
 
     read_input_buffer_from_host(buffer);
     read_midi_from_host(host_midi_buffer, block_start_global_sample);
-    update_parameters(processor.getPlayHead());
+    parameters.update_inputs(processor.getPlayHead());
     csound.process_block(block_size);
+    parameters.update_outputs();
     write_output_buffer_to_host(buffer);
     write_midi_to_host(host_midi_buffer, block_start_global_sample, block_size);
 }
@@ -170,10 +172,6 @@ void Processor::write_midi_to_host(juce::MidiBuffer& host_midi_messages, int blo
     }
 }
 
-
-void Processor::update_parameters(juce::AudioPlayHead* play_head) {
-    parameters.update_on_process(play_head);
-}
 
 void Processor::getStateInformation (juce::MemoryBlock& destData) {
   parameters.getStateInformation(destData);

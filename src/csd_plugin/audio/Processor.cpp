@@ -11,6 +11,7 @@
 #include <csd_plugin/audio/Logger.h>
 #include <csd_plugin/audio/Processor.h>
 #include <thread>
+#include <cstring>
 
 const double WRAP_VOLUME_LIMIT = 5.0f;
 
@@ -181,7 +182,8 @@ bool Processor::setup_csound(int sample_rate) {
     csound->SetMessageCallback(csound_message_callback);
 
     set_csound_midi_callbacks();
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0", static_cast<int>(sample_rate));
+    // TODO consider making m0 configurable and allow m127 for debug
+    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
     csound->SetOption(options.c_str());
 
     is_compiling = true;

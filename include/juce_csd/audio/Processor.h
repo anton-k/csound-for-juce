@@ -2,12 +2,12 @@
 
 #include <csound/csound.hpp>
 #include <string>
-#include <sys/types.h>
 #include <juce_audio_basics/juce_audio_basics.h>
-#include "../params/Parameters.h"
+#include <juce_csd/params/Parameters.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csd_plugin/audio/Processor.h>
 #include <LockFreeSpscQueue.h>
+#include <array>
 
 namespace juce_csd {
 
@@ -71,7 +71,6 @@ class Processor {
     void write_midi_to_host(juce::MidiBuffer&, int, int);
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
-    void update_parameters(juce::AudioPlayHead*);
     bool pop_log(LogMessage& msg);
 
     csd_plugin::Processor csound;

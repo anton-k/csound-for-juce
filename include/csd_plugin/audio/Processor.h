@@ -96,7 +96,13 @@ struct IOLayout {
     int extra_latency_samples{0}; ///< constant extra latency in samples of the plugin
 };
 
-/// Defines audio processing with Csound
+/// Defines audio processing with Csound.
+// for real-time safety in you csd files:
+//
+// - avoid file loading in instruments;
+// - avoid `printf`/`printk` in production;
+// - avoid opcodes with unbounded initialization cost;
+// - avoid dynamic score generation in the audio thread unless carefully controlled.
 class Processor {
   public:
     /// Constructs processor with the content of CSD-file, layout of the IO-busses

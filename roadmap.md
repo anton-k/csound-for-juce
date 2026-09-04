@@ -166,5 +166,241 @@ If someone creates an `IOLayout` with 4 inputs, no bus is added and the plugin w
 
 ---
 
+### 2.19 `Parameters` getters throw exceptions
+
+**File:** `src/juce_csd/params/Parameters.cpp`
+
+```cpp
+throw std::runtime_error("Float parameter not found: " + id);
+```
+
+This is okay on the UI thread if exceptions are enabled, but plugin code often prefers to avoid exceptions.
+
+Also, `ParameterAttachments::add_slider` calls these getters. If a parameter ID is misspelled, the editor constructor may throw and crash the plugin.
+
+**Better options:**
+
+- return `std::optional<std::reference_wrapper<...>>`;
+- return pointer and assert/log;
+- use `juce::Result`;
+- validate parameter specs before creating UI.
+
+---
+
+
+### 2.20 State deserialization errors are only printed with `DBG`
+
+**File:** `src/juce_csd/params/Parameters.cpp`
+
+```cpp
+if (result.failed()) {
+    DBG(result.getErrorMessage());
+}
+```
+
+For production, this should probably go through the plugin logger or error reporting system.
+
+---
+
+### 2.21 Parameter spec version is not validated
+
+`ParameterSpecMap` stores `version`, and JSON serialization writes it, but deserialization does not currently validate or migrate versions.
+
+This is noted in your TODO, but it is important for v1.0.
+
+Potential issues:
+
+- renamed parameter IDs;
+- removed parameters;
+- changed choice order;
+- changed float range;
+- changed UI parameter semantics.
+
+---
+
+### 2.23 `Parameters` initializer list order may not match member declaration order
+
+In `Parameters::Parameters`:
+
+```cpp
+Parameters::Parameters(juce::AudioProcessor& processor, const ParameterSpec& spec):
+    audio_parameters(),
+    ui_parameters(),
+    sensor_parameters(),
+    parameter_spec_map(spec)
+```
+
+But member initialization order is determined by declaration order, not initializer list order.
+
+If `parameter_spec_map` is declared after other members, this can produce `-Wreorder` warnings.
+
+Make initializer list order match declaration order.
+
+---
+
+### 2.24 `UiParameterList` uses `std::atomic<float>` directly in a map
+
+This works because you construct elements in place, but it is fragile.
+
+`std::atomic` is not copyable or movable. If someone later writes code that copies the map, it will break.
+
+Options:
+
+```cpp
+std::map<std::string, std::unique_ptr<std::atomic<float>>>
+```
+
+or a small wrapper:
+
+```cpp
+struct AtomicFloat {
+    std::atomic<float> value;
+};
+```
+
+with explicit constructors.
+
+---
+
+
+Real-time audit for audio thread
+
+### 3.1 `std::function` in the audio path
+
+`csd_plugin::Processor` uses:
+
+```cpp
+std::function<void()> krate_callback;
+LogCallback log_callback;
+```
+
+`std::function` can be fine if the target is small and does not allocate, but it introduces type erasure overhead and can be surprising.
+
+For strict RT code, consider:
+
+```cpp
+void* callbackUserData;
+void (*krateCallback)(void* userData);
+```
+
+or a fixed functor type.
+
+At minimum, document that callbacks must not allocate.
+
+---
+
+### 3.2 JUCE MIDI iteration may not be fully allocation-free
+
+In:
+
+```cpp
+for (const auto metadata : host_midi_messages) {
+    auto msg = metadata.getMessage();
+    ...
+}
+```
+
+Depending on JUCE version and message type, this may involve temporary objects. Short MIDI messages are usually fine, but SysEx or unusual messages may allocate.
+
+You already filter SysEx, which is good.
+
+For maximum safety, use the lowest-level JUCE MIDI iteration API available and avoid constructing large `MidiMessage` objects.
+
+---
+
+### 3.3 Adding MIDI events to the host buffer may allocate
+
+```cpp
+host_midi_messages.addEvent(juce_midi_event, relative_pos);
+```
+
+JUCE may need to grow its internal buffer. This can allocate.
+
+This is often unavoidable in JUCE plugin `processBlock`, but it is worth noting for the RT audit.
+
+Possible mitigations:
+
+- reserve MIDI buffer capacity if JUCE exposes a way;
+- limit number of output MIDI events per block;
+- avoid producing large MIDI output.
+
+---
+
+## 4. API/design improvements
+
+### 4.1 Introduce a single timing model
+
+The current code has several related concepts:
+
+- host block sample position;
+- Csound global sample position;
+- MIDI input relative position;
+- MIDI output global position;
+- output FIFO fill level;
+- `ksmps` cycle boundaries;
+- reported latency.
+
+These should be unified into a small timing/scheduling module.
+
+A possible design:
+
+```cpp
+struct ProcessTiming {
+    int64_t hostBlockStartSample;
+    int64_t csoundSampleTime;
+    int blockSize;
+    int ksmps;
+};
+```
+
+Then MIDI input/output and audio FIFO management can use one source of truth.
+
+---
+
+
+
+
+## 6. Suggested refactoring priorities
+
+If I were prioritizing fixes for v1.0, I would do them in this order:
+
+### Phase 1: correctness blockers
+
+1. Initialize host parameters.
+2. Fix choice parameter 0-based/1-based convention.
+3. Fix MIDI timestamp coordinate system.
+4. Fix latency double-counting.
+5. Fix `MemoryOutputStream` append mode.
+6. Fix `ErrorBanner` truncation bug.
+7. Fix MIDI output size cast bug.
+8. Guard `prepareToPlay` against failed Csound compilation.
+
+### Phase 2: audio/MIDI timing stability
+
+1. Redesign audio FIFO cycle calculation.
+2. Implement partial input reads or cycle limiting.
+3. Make MIDI output scheduling block-accurate.
+4. Use 64-bit sample positions.
+5. Define bypass behavior with crossfade/dry-through.
+
+### Phase 3: robustness
+
+1. Validate parameter specs against Csound channels.
+2. Emit warnings/errors for missing channels.
+3. Improve state version handling.
+4. Add log throttling and dropped-message counters.
+5. Make `FastFifo` thread-safety expectations explicit.
+
+### Phase 4: style/architecture
+
+1. Remove JUCE includes from `csd_plugin`.
+2. Standardize naming.
+3. Add `.clang-format`.
+4. Remove unused members/includes.
+5. Add const/noexcept/nodiscard.
+6. Split parameter update into input/output phases.
+
+---
+
 
 
