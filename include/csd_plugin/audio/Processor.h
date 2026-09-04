@@ -248,11 +248,11 @@ class Processor {
     AudioBuffers audio_buffers{0};
     MidiBuffers midi_buffers{1024, 1024};
     int csound_cycle_size{0};
-    int current_sample{0};
+    int64_t current_sample{0};
     std::string csd_file_content;
     std::atomic<bool> ready_to_play{false};
     IOLayout io_layout;
-    int current_cycle_end_sample{0};
+    int64_t current_cycle_end_sample{0};
 
     std::atomic<bool> is_processing_{false};
     int current_max_block_size{0};

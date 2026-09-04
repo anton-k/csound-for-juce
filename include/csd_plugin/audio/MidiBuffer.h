@@ -8,7 +8,7 @@ namespace csd_plugin {
 
 /// Raw midi event
 struct RawMidiEvent {
-    int32_t samplePosition;  // Timestamp relative to the start of the current audio block
+    int64_t samplePosition;  // Timestamp relative to the start of the current audio block
     uint8_t size;            // Number of valid bytes (1 to 3 for standard MIDI)
     uint8_t data[4];         // Raw MIDI bytes (padded to 4 bytes for perfect 32-bit memory alignment)
 
