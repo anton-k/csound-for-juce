@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace csd_plugin {
 
@@ -37,22 +38,43 @@ bool is_control_channel_type(controlChannelInfo_t info) {
   return (info.type & CSOUND_CHANNEL_TYPE_MASK) == CSOUND_CONTROL_CHANNEL;
 }
 
+constexpr int MIN_FIFO_BLOCK_FRAMES = 8000;
+constexpr unsigned int MAX_COMPILATION_LOG_CHARS = 65536;
+
 int get_desired_audio_buffer_size(int channels, int max_block_size, int ksmps)
 {
     if (channels <= 0)
         return 0;
 
     // Some hosts can behave oddly. Keep a conservative hard floor.
-    const int safe_block_size = std::max(max_block_size * 2, 8192);
+    const int64_t safe_max_block = std::max<int64_t>(static_cast<int64_t>(max_block_size), 1);
+    const int64_t safe_block_size = std::max<int64_t>(safe_max_block * 2, MIN_FIFO_BLOCK_FRAMES);
 
     // Worst-case output occupancy should stay below block_size + ksmps.
     // Use extra safety margin.
-    const int safety_frames = std::max(4 * ksmps, 256);
+    const int64_t safety_frames = std::max<int64_t>(static_cast<int64_t>(4) * static_cast<int64_t>(ksmps), 256);
 
-    const int frames = safe_block_size + safety_frames;
+    const int64_t frames = safe_block_size + safety_frames;
+    const int64_t samples = frames * static_cast<int64_t>(channels);
+    const int64_t max_int = static_cast<int64_t>(std::numeric_limits<int>::max());
 
-    return frames * channels;
+    return static_cast<int>(samples > max_int ? max_int : samples);
 }
+
+struct ScopedProcessingScope {
+    Processor& proc;
+
+    explicit ScopedProcessingScope(Processor& p)
+        : proc(p)
+    {
+        proc.begin_processing_scope();
+    }
+
+    ~ScopedProcessingScope()
+    {
+        proc.end_processing_scope();
+    }
+};
 
 }
 
@@ -60,8 +82,13 @@ CsoundSettings::CsoundSettings(): ksmps(1), out_size(2), in_size(0) {}
 
 void CsoundSettings::prepare(Csound* csound) {
     ksmps = static_cast<int>(csound->GetKsmps());
-    out_size = static_cast<int>(csound->GetChannels(0));
-    in_size = static_cast<int>(csound->GetChannels(1));
+
+    // Do not query audio channel counts here.
+    //
+    // The channel-count query API is unreliable across Csound versions and host states,
+    // especially during sample-rate switches and repeated prepareToPlay() calls.
+    // The plugin's declared IOLayout is authoritative for channel counts.
+
     sample_rate = static_cast<int>(csound->GetSr());
     zero_dbfs = static_cast<MYFLT>(csound->Get0dBFS());
 
@@ -122,9 +149,31 @@ void Processor::set_host_io() {
         csound->SetHostAudioIO();
         csound->SetHostMIDIIO();
     #else
-        // Fallback for Csound 6 using the underlying C API directly via GetCsound()
-        csoundSetHostImplementedAudioIO(csound->GetCsound(), 1, 0);
-        csound->SetHostImplementedMIDIIO(1);
+        const int play =
+            (io_layout.get_out_size() > 0)
+                ? 1
+                : 0;
+
+        const int rec =
+            (io_layout.get_total_in_size() > 0)
+                ? 1
+                : 0;
+
+        csoundSetHostImplementedAudioIO(
+            csound->GetCsound(),
+            play,
+            rec
+        );
+
+        const int host_midi_io =
+            (io_layout.has_midi_in || io_layout.has_midi_out)
+                ? 1
+                : 0;
+
+        csoundSetHostImplementedMIDIIO(
+            csound->GetCsound(),
+            host_midi_io
+        );
     #endif
 }
 
@@ -150,9 +199,10 @@ int Processor::midi_device_close(CSOUND *csound_, void *user_data)
 }
 
 int Processor::midi_read(CSOUND* csound, void* userData, unsigned char* buf, int max_size) {
-    auto* proc = static_cast<Processor*>(userData);
+    void* host_data = (userData != nullptr) ? userData : csoundGetHostData(csound);
+    auto* proc = static_cast<Processor*>(host_data);
 
-    if (!proc || !(proc->get_io_layout().has_midi_in))
+    if (!proc || !(proc->get_io_layout().has_midi_in) || max_size <= 0 || buf == nullptr)
         return 0;
 
     auto& queue = proc->midi_buffers.in();
@@ -166,6 +216,12 @@ int Processor::midi_read(CSOUND* csound, void* userData, unsigned char* buf, int
         const int msg_size = next_event.size;
 
         if (msg_size == 0) {
+            queue.pop();
+            continue;
+        }
+
+        // Avoid getting stuck forever on an event that cannot fit into Csound's buffer.
+        if (msg_size > max_size) {
             queue.pop();
             continue;
         }
@@ -190,20 +246,20 @@ int Processor::midi_read(CSOUND* csound, void* userData, unsigned char* buf, int
 
 int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *midi_buffer, int midi_buffer_size)
 {
-    auto csound_host_data = csoundGetHostData(csound_);
-    Processor *processor = static_cast<Processor *>(csound_host_data);
+    void* host_data = (userData != nullptr) ? userData : csoundGetHostData(csound_);
+    Processor *processor = static_cast<Processor *>(host_data);
 
     if (!processor || !(processor->get_io_layout().has_midi_out))
         return 0;
 
-    if (midi_buffer_size <= 0)
+    if (midi_buffer_size <= 0 || midi_buffer == nullptr)
         return 0;
 
     const int safe_int_size = std::min(midi_buffer_size, MIDI_DATA_SIZE);
     const uint8_t safe_size = static_cast<uint8_t>(safe_int_size);
 
     csd_plugin::RawMidiEvent midi_event{
-        processor->get_current_sample(),
+        processor->current_cycle_start_sample,
         midi_buffer,
         safe_size
     };
@@ -213,8 +269,27 @@ int Processor::midi_write(CSOUND *csound_, void *userData, const unsigned char *
     return 0;
 }
 
+void Processor::stop_and_reset_csound() {
+    if (csound == nullptr) {
+        return;
+    }
+
+    // Detach host data first so Csound callbacks cannot find this Processor
+    // while we are shutting the engine down.
+    csound->SetHostData(nullptr);
+
+    // Destroy the Csound instance completely. The unique_ptr destructor
+    // handles all internal Csound cleanup safely. This is the most reliable
+    // way to handle sample rate changes, as csound->Reset() does not clear
+    // compiled instruments or options.
+    csound.reset();
+}
+
 bool Processor::setup_csound(int sample_rate) {
-    csound = std::unique_ptr<Csound>(new Csound());
+    const int safe_sample_rate = (sample_rate > 0) ? sample_rate : 44100;
+
+    // Always create a fresh Csound instance
+    csound = std::make_unique<Csound>();
 
     csound->SetHostData(this);
     set_host_io();
@@ -222,9 +297,31 @@ bool Processor::setup_csound(int sample_rate) {
 
     set_csound_midi_callbacks();
 
-    // TODO consider making m0 configurable and allow m127 for debug
-    std::string options = std::format("-n -d -b0 -+rtmidi=NULL -M0 -sr {} -Q0 -m0", static_cast<int>(sample_rate));
-    csound->SetOption(options.c_str());
+    // Make sure no stale FIFO state survives Csound re-initialization.
+    audio_buffers.clear();
+    midi_buffers.clear();
+
+    // IMPORTANT: Csound's SetOption may store the pointer and read it later
+    // during CompileCSD. We must ensure the strings stay alive until then.
+    // Passing .c_str() of a temporary std::format result is a use-after-free!
+    std::string opt_r = std::format("-r{}", safe_sample_rate);
+
+    csound->SetOption("-d");
+    csound->SetOption("-m0");
+    csound->SetOption("-+rtmidi=NULL");
+    csound->SetOption("-M0");
+    csound->SetOption(opt_r.c_str());
+    csound->SetOption("-Q0");
+
+    if (io_layout.get_total_in_size() > 0) {
+        csound->SetOption("-i adc");
+    }
+
+    if (io_layout.get_out_size() > 0) {
+        csound->SetOption("-o dac");
+    } else {
+        csound->SetOption("-n");
+    }
 
     is_compiling = true;
     compilation_log_buffer.clear();
@@ -233,6 +330,11 @@ bool Processor::setup_csound(int sample_rate) {
     int start_result = 0;
 
     if (compile_result == 0) {
+        // Do not re-assert host I/O here.
+        //
+        // Some Csound versions expect host I/O configuration to remain stable
+        // around compilation/start. Re-asserting it after CompileCSD() can
+        // disturb the audio I/O state and cause the plugin to go silent.
         start_result = csound->Start();
     }
 
@@ -240,69 +342,142 @@ bool Processor::setup_csound(int sample_rate) {
 
     if (compile_result != 0 || start_result != 0) {
         // FAILURE: Copy the main-thread string into the RT-safe buffer
-        set_last_error(compilation_log_buffer.c_str());
+        const char* error_text =
+            compilation_log_buffer.empty()
+                ? "Csound compilation or start failed"
+                : compilation_log_buffer.c_str();
 
-        log(csd_plugin::LogLevel::Error, compilation_log_buffer.c_str());
+        set_last_error(error_text);
+        log(csd_plugin::LogLevel::Error, error_text);
 
-        ready_to_play = false;
+        ready_to_play.store(false, std::memory_order_release);
+        std::string().swap(compilation_log_buffer);
         return false;
     }
 
     // SUCCESS: Clear any previous errors
     clear_last_error();
+    std::string().swap(compilation_log_buffer);
     return true;
 }
 
 void Processor::prepare_to_play(int sample_rate, int max_block_size)
 {
-    ready_to_play = prepare_csound_to_play(sample_rate);
+    const int safe_sample_rate = (sample_rate > 0) ? sample_rate : 44100;
 
-    if (!ready_to_play) {
+    // Keep the processor inactive until the whole preparation is complete.
+    ready_to_play.store(false, std::memory_order_release);
+    clear_last_error();
+
+    if (!prepare_csound_to_play(safe_sample_rate)) {
+        prepared_sample_rate = 0;
+        stop_and_reset_csound();
+        log(LogLevel::Error, "prepare_to_play: prepare_csound_to_play failed");
         return;
     }
 
     if (!validate_io_layout()) {
-        ready_to_play = false;
+        prepared_sample_rate = 0;
+        stop_and_reset_csound();
+        log(LogLevel::Error, "prepare_to_play: validate_io_layout failed");
         return;
     }
 
-    prepare_audio_buffers(max_block_size);
+    if (csound_settings.sample_rate != safe_sample_rate) {
+        log(
+            LogLevel::Warning,
+            "Csound sample rate differs from host sample rate after initialization"
+        );
+    }
 
     current_sample = 0;
+    current_cycle_start_sample = 0;
     current_cycle_end_sample = 0;
     midi_buffers.clear();
+
+    prepare_audio_buffers(max_block_size);
+
+    // Only now is the processor fully usable.
+    ready_to_play.store(true, std::memory_order_release);
+    log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true");
 }
 
 bool Processor::prepare_csound_to_play(int sample_rate) {
     //
-    // 1. Csound re-initialization condition:
-    // Re-init ONLY if not ready (uninitialized/failed) OR sample_rate changed.
-    bool was_ready = ready_to_play.load();
-    bool needs_csound_reinit = !was_ready || (csound_settings.sample_rate != sample_rate);
+    // Re-initialize Csound when:
+    // - Csound instance is missing,
+    // - host sample rate changed since last successful preparation.
+    //
+    // We intentionally do not parse or rewrite the CSD file.
+    // Csound command-line flags are responsible for the sample-rate override.
+    //
+    const bool needs_csound_reinit =
+        (csound == nullptr) ||
+        (prepared_sample_rate != sample_rate);
 
-    // Block audio thread
-    ready_to_play = false;
+    // NOTE: We intentionally DO NOT spin on is_processing() here.
+    // Many DAWs suspend the audio thread during sample-rate switches.
+    // If the audio thread was suspended inside processBlock(), spinning
+    // here would deadlock the main thread and cause prepareToPlay to fail.
+    // We rely on the host's guarantee that processBlock is not running
+    // concurrently with prepareToPlay.
 
-    while (is_processing_.load(std::memory_order_acquire)) {
-        std::this_thread::yield();
-    }
-
-    // Re-initialize Csound if needed
     if (needs_csound_reinit) {
-        if (csound != nullptr) {
-            csound->SetHostData(nullptr);
-            csound.reset();
-        }
+        // The k-rate callback belongs to the previous Csound processing setup.
+        // It will be set again by the JUCE layer after successful preparation.
+        krate_callback = nullptr;
 
-        if (setup_csound(sample_rate)) {
-            csound_settings.prepare(csound.get());
-        } else {
+        stop_and_reset_csound();
+
+        if (!setup_csound(sample_rate)) {
+            prepared_sample_rate = 0;
             return false;
         }
+
+        csound_settings.prepare(csound.get());
+        prepared_sample_rate = sample_rate;
+    } else {
+        if (!csound) {
+            prepared_sample_rate = 0;
+            return false;
+        }
+
+        // Csound is already prepared at this sample rate.
+        //
+        // Do not re-query Csound settings here. Some hosts/JUCE wrappers can call
+        // prepareToPlay() multiple times, and re-querying Csound while it is already
+        // prepared can create inconsistent state. Keep the existing settings and only
+        // normalize values that are authoritative for the plugin.
+        prepared_sample_rate = sample_rate;
     }
+
+    const int layout_out = io_layout.get_out_size();
+    const int layout_in = io_layout.get_total_in_size();
+
+    // Some Csound versions/host states can return unreliable audio channel counts,
+    // especially while the host is reopening audio IO after a sample-rate switch.
+    // For plugin readiness, the declared IOLayout is authoritative.
+    if (csound_settings.ksmps <= 0) {
+        log(
+            LogLevel::Warning,
+            std::format(
+                "Csound reported invalid ksmps={}. Falling back to ksmps=1.",
+                csound_settings.ksmps
+            ).c_str()
+        );
+        csound_settings.ksmps = 1;
+    }
+
+    if (csound_settings.sample_rate <= 0) {
+        csound_settings.sample_rate = sample_rate;
+    }
+
+    csound_settings.out_size = layout_out;
+    csound_settings.in_size = layout_in;
 
     return true;
 }
+
 
 void Processor::prepare_audio_buffers(int max_block_size)
 {
@@ -318,17 +493,23 @@ void Processor::prepare_audio_buffers(int max_block_size)
 
     audio_buffers.reset(desired_in_capacity, desired_out_capacity);
 
-    current_max_block_size = std::max(max_block_size, 8192);
+    current_max_block_size = std::max(max_block_size, MIN_FIFO_BLOCK_FRAMES);
 
     resync_audio_buffers();
 }
 
 void Processor::process_block(int block_size)
 {
-    if (!ready_to_play || block_size <= 0)
+    if (block_size <= 0)
         return;
 
-    is_processing_.store(true, std::memory_order_release);
+    // Protect the whole internal processing step.
+    // The JUCE layer should also use begin_processing_scope()/end_processing_scope()
+    // around host FIFO transfers so prepare/release cannot reset state concurrently.
+    ScopedProcessingScope scope(*this);
+
+    if (!ready_to_play.load(std::memory_order_acquire))
+        return;
 
     const int in_size = io_layout.get_total_in_size();
     const int out_size = io_layout.get_out_size();
@@ -352,44 +533,57 @@ void Processor::process_block(int block_size)
     }
 
     if (!capacity_ok) {
-        set_last_error("Host block size exceeds internal FIFO capacity; resyncing");
-        log(LogLevel::Error, "Host block size exceeds internal FIFO capacity; resyncing");
+//        set_last_error("Host block size exceeds internal FIFO capacity; resyncing");
+//        log(LogLevel::Error, "Host block size exceeds internal FIFO capacity; resyncing");
 
         resync_audio_buffers();
         ensure_output_for_block(block_size);
 
-        is_processing_.store(false, std::memory_order_release);
         return;
     }
 
     csound_process(block_size);
     ensure_output_for_block(block_size);
-
-    is_processing_.store(false, std::memory_order_release);
 }
 
 void Processor::release_resources() {
-    ready_to_play = false;
+    //
+    // Soft release / suspend.
+    //
+    // Important:
+    // Some hosts call releaseResources() during sample-rate switches,
+    // sometimes after prepareToPlay() has already prepared the plugin.
+    // If we destroy Csound here, the plugin can remain silent until the user
+    // manually deactivates/activates it.
+    //
+    // Therefore we only clear real-time FIFO state and timing counters here.
+    // Full destruction is done in shutdown(), called from the destructor.
+    //
+    // NOTE: No spinning on is_processing(). The host guarantees thread safety.
+    clear_buffers();
 
-    if (csound == nullptr) {
-        return;
-    }
+    current_sample = 0;
+    current_cycle_start_sample = 0;
+    current_cycle_end_sample = 0;
+}
 
-    while (is_processing_.load(std::memory_order_acquire)) {
-        std::this_thread::yield();
-    }
+void Processor::shutdown() {
+    ready_to_play.store(false, std::memory_order_release);
+    prepared_sample_rate = 0;
 
-    csound->SetHostData(nullptr);
     krate_callback = nullptr;
     log_callback = nullptr;
-    csound.reset();
+
+    stop_and_reset_csound();
 
     clear_buffers();
 
     current_sample = 0;
+    current_cycle_start_sample = 0;
     current_cycle_end_sample = 0;
     current_max_block_size = 0;
 }
+
 
 static int ceil_div(int a, int b)
 {
@@ -446,7 +640,29 @@ void Processor::csound_process(int block_size)
         }
     }
 
+    const int64_t block_start_sample = current_sample;
+    const int64_t block_end_sample = block_start_sample + block_size;
+
+    // The output FIFO may already contain samples for the current host block
+    // because of latency prefill or leftover frames from previous blocks.
+    const int64_t initial_out_frames =
+        static_cast<int64_t>(audio_buffers.out().get_size()) / static_cast<int64_t>(out_size);
+
+    int64_t next_cycle_output_start_sample = block_start_sample + initial_out_frames;
+
+    current_cycle_start_sample = block_start_sample;
+    current_cycle_end_sample = block_end_sample;
+
     for (int cycle_index = 0; cycle_index < csound_cycle_size; ++cycle_index) {
+        // MIDI timing for this Csound cycle.
+        //
+        // Csound consumes input MIDI events up to the end of the audio frames
+        // generated by this cycle. Output MIDI events are stamped with the start
+        // of this cycle.
+        current_cycle_start_sample = next_cycle_output_start_sample;
+        current_cycle_end_sample = current_cycle_start_sample + ksmps;
+        next_cycle_output_start_sample += ksmps;
+
         // This should not happen after the total watermark check above,
         // but keep it as a per-cycle safety guard.
         if (audio_buffers.out().get_free_space() < out_cycle_samples) {
@@ -457,10 +673,16 @@ void Processor::csound_process(int block_size)
             break;
         }
 
-        current_cycle_end_sample = current_sample + ksmps;
-
         if (in_size > 0) {
             MYFLT* spin = csound->GetSpin();
+
+            if (spin == nullptr) {
+                set_last_error("Csound input buffer is null; resyncing");
+                log(LogLevel::Error, "Csound input buffer is null; resyncing");
+
+                resync_audio_buffers();
+                break;
+            }
 
             // IMPORTANT:
             // Use partial read + zero-fill.
@@ -481,9 +703,23 @@ void Processor::csound_process(int block_size)
             krate_callback();
         }
 
-        csound->PerformKsmps();
+        int perform_result = csound->PerformKsmps();
+        if (perform_result != 0) {
+            // If the score ends or Csound stops, rewind the score to keep it running.
+            // This prevents the plugin from going silent if the user forgets an infinite f-statement.
+            csound->RewindScore();
+            log(LogLevel::Warning, "Csound score ended or stopped; rewinding to keep alive.");
+        }
 
         const MYFLT* spout = csound->GetSpout();
+
+        if (spout == nullptr) {
+            set_last_error("Csound output buffer is null; resyncing");
+            log(LogLevel::Error, "Csound output buffer is null; resyncing");
+
+            resync_audio_buffers();
+            break;
+        }
 
         const bool write_success =
             audio_buffers.out().write_block(spout, out_cycle_samples);
@@ -495,9 +731,13 @@ void Processor::csound_process(int block_size)
             resync_audio_buffers();
             break;
         }
-
-        current_sample = current_cycle_end_sample;
     }
+
+    // Advance the global sample counter by the host block size.
+    // This keeps MIDI timestamps perfectly synced with the host timeline.
+    current_sample += block_size;
+    current_cycle_start_sample = current_sample;
+    current_cycle_end_sample = current_sample;
 }
 
 void Processor::clear_buffers() {
@@ -534,10 +774,16 @@ void Processor::csound_message_callback(CSOUND* csound, int attr, const char* fo
         std::string msg(buffer);
 
         if (!msg.empty() && msg != "\n") {
-            processor->compilation_log_buffer += msg;
+            if (processor->compilation_log_buffer.size() < MAX_COMPILATION_LOG_CHARS) {
+                processor->compilation_log_buffer += msg;
 
-            if (msg.back() != '\n') {
-                processor->compilation_log_buffer += '\n';
+                if (msg.back() != '\n') {
+                    processor->compilation_log_buffer += '\n';
+                }
+
+                if (processor->compilation_log_buffer.size() > MAX_COMPILATION_LOG_CHARS) {
+                    processor->compilation_log_buffer.resize(MAX_COMPILATION_LOG_CHARS);
+                }
             }
         }
     } else {
@@ -558,24 +804,23 @@ bool Processor::validate_io_layout()
         return false;
     }
 
-    const int layout_out_size = io_layout.get_out_size();
-    const int layout_total_in_size = io_layout.get_total_in_size();
-
-    if (layout_out_size > 0 && csound_settings.out_size != layout_out_size) {
-        set_last_error("IOLayout output channels do not match Csound nchnls");
-        return false;
+    // Corrective validation:
+    //
+    // The declared IOLayout is authoritative for the plugin bus/channel configuration.
+    // Do not fail preparation because of unreliable Csound channel queries.
+    if (csound_settings.ksmps <= 0) {
+        csound_settings.ksmps = 1;
     }
 
-    if (layout_total_in_size > 0 && csound_settings.in_size != layout_total_in_size) {
-        // Csound can report nchnls_i = 0 as 1 in some versions.
-        // If the plugin expects no audio input, allow Csound reporting 1 input channel.
-        if (csound_settings.in_size == 1 && layout_total_in_size == 0) {
-            return true;
-        }
-
-        set_last_error("IOLayout input channels do not match Csound nchnls_i");
-        return false;
+    if (csound_settings.sample_rate <= 0) {
+        csound_settings.sample_rate =
+            (prepared_sample_rate > 0)
+                ? prepared_sample_rate
+                : 44100;
     }
+
+    csound_settings.out_size = io_layout.get_out_size();
+    csound_settings.in_size = io_layout.get_total_in_size();
 
     return true;
 }
@@ -585,6 +830,7 @@ void Processor::resync_audio_buffers()
     audio_buffers.clear();
     midi_buffers.clear();
 
+    current_cycle_start_sample = current_sample;
     current_cycle_end_sample = current_sample;
 
     const int in_size = io_layout.get_total_in_size();
@@ -596,21 +842,9 @@ void Processor::resync_audio_buffers()
     // This creates the expected initial latency and prevents first-block
     // input underflow when block_size and ksmps are not multiples.
     if (in_size > 0 && out_size > 0 && ksmps > 0) {
-        int remaining = ksmps * out_size;
-
-        constexpr int chunk_size = 256;
-        MYFLT zeros[chunk_size] = {};
-
-        while (remaining > 0) {
-            const int n = std::min(remaining, chunk_size);
-
-            if (!audio_buffers.out().write_block(zeros, n)) {
-                set_last_error("Failed to prefill Csound output FIFO");
-                log(LogLevel::Error, "Failed to prefill Csound output FIFO");
-                break;
-            }
-
-            remaining -= n;
+        int prefill_size = ksmps * out_size;
+        for (int i = 0; i < prefill_size; ++i) {
+            audio_buffers.out().write(static_cast<MYFLT>(0.0));
         }
     }
 }

@@ -113,12 +113,13 @@ class Processor {
       csound(nullptr),
       csd_file_content(csd),
       io_layout(io_layout_) {};
+
+    void shutdown();
+
     ~Processor() {
-      log_callback = nullptr;
-      krate_callback = nullptr;
-      release_resources();
-      csound.reset();
-    };
+        shutdown();
+    }
+
 
     /// Called prior to audio processing. It compiles the CSD-file and instantiates
     // the buffers and reads all constants from Csoun dsettings that are needed for audio processing
@@ -228,6 +229,22 @@ class Processor {
 
     void resync_audio_buffers();
 
+    /// Marks the beginning of an audio-thread critical section.
+    /// prepare_to_play() and release_resources() wait until all processing scopes are finished.
+    void begin_processing_scope() {
+        processing_depth_.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    /// Marks the end of an audio-thread critical section.
+    void end_processing_scope() {
+        processing_depth_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
+    /// Returns true if any audio-thread critical section is active.
+    bool is_processing() const {
+        return processing_depth_.load(std::memory_order_acquire) > 0;
+    }
+
   private:
     void ensure_output_for_block(int block_size);
     bool validate_io_layout();
@@ -241,6 +258,7 @@ class Processor {
     void set_host_io();
     bool setup_csound(int sample_rate);
     void clear_buffers();
+    void stop_and_reset_csound();
 
     // midi callbacks
     static int midi_read(CSOUND*, void* userData, unsigned char* buf, int n);
@@ -260,10 +278,12 @@ class Processor {
     std::string csd_file_content;
     std::atomic<bool> ready_to_play{false};
     IOLayout io_layout;
+    int64_t current_cycle_start_sample{0};
     int64_t current_cycle_end_sample{0};
 
-    std::atomic<bool> is_processing_{false};
+    std::atomic<int> processing_depth_{0};
     int current_max_block_size{0};
+    int prepared_sample_rate{0};
     std::function<void()> krate_callback;
 
     LogCallback log_callback;

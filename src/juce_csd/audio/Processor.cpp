@@ -15,6 +15,25 @@
 
 namespace juce_csd {
 
+namespace {
+
+struct ScopedCsoundProcessingScope {
+    csd_plugin::Processor& proc;
+
+    explicit ScopedCsoundProcessingScope(csd_plugin::Processor& p)
+        : proc(p)
+    {
+        proc.begin_processing_scope();
+    }
+
+    ~ScopedCsoundProcessingScope()
+    {
+        proc.end_processing_scope();
+    }
+};
+
+}
+
 Processor::Processor(const std::string& csd_file_content, const csd_plugin::IOLayout& io_layout, const ParameterSpec& parameter_spec, juce::AudioProcessor& processor):
   csound(csd_file_content, io_layout), parameters(processor, parameter_spec), log_queue(log_buffer)
 {
@@ -52,7 +71,14 @@ void Processor::prepareToPlay(double sample_rate, int max_block_size)
 
     const int in_channels = csound.get_io_layout().get_total_in_size();
     const int out_channels = csound.get_io_layout().get_out_size();
-    const int safe_block_size = std::max(0, max_block_size);
+
+    // Some hosts report a very small or zero max block size during
+    // sample-rate switches. Keep a conservative minimum scratch size.
+    int safe_block_size = std::max(max_block_size, 8192);
+
+    if (safe_block_size < 1) {
+        safe_block_size = 1;
+    }
 
     host_input_scratch.resize(
         static_cast<size_t>(safe_block_size) *
@@ -76,8 +102,14 @@ void Processor::prepareToPlay(double sample_rate, int max_block_size)
     was_bypassed = false;
 }
 
+
 void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& host_midi_buffer)
 {
+    // Protect the entire host-facing processing step.
+    // This prevents prepareToPlay()/releaseResources() from resetting Csound/FIFOs
+    // while the audio thread is still reading/writing them.
+    ScopedCsoundProcessingScope processing_scope(csound);
+
     // JUCE plugins should enforce it at the entry point to
     // prevent massive CPU spikes on x86 architectures.
     const juce::ScopedNoDenormals noDenormals;
@@ -128,26 +160,26 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
     const int in_channels = csound.get_io_layout().get_total_in_size();
     const int out_channels = csound.get_io_layout().get_out_size();
 
-    // Safety guard: if the host gives a larger block than we prepared for,
-    // do not overflow scratch buffers or FIFOs.
     const size_t needed_input_samples =
-        static_cast<size_t>(block_size) * static_cast<size_t>(std::max(0, in_channels));
+        static_cast<size_t>(block_size) *
+        static_cast<size_t>(std::max(0, in_channels));
 
     const size_t needed_output_samples =
-        static_cast<size_t>(block_size) * static_cast<size_t>(std::max(0, out_channels));
+        static_cast<size_t>(block_size) *
+        static_cast<size_t>(std::max(0, out_channels));
 
-    if ((in_channels > 0 && host_input_scratch.size() < needed_input_samples) ||
-        (out_channels > 0 && host_output_scratch.size() < needed_output_samples)) {
-        csound.set_last_error("Host block size exceeds prepared scratch size; clearing");
-        buffer.clear();
-        host_midi_buffer.clear();
-        csound.resync_audio_buffers();
-        return;
-    }
+    const bool can_use_scratch =
+        (in_channels <= 0 || host_input_scratch.size() >= needed_input_samples) &&
+        (out_channels <= 0 || host_output_scratch.size() >= needed_output_samples);
 
     const int64_t block_start_global_sample = csound.get_current_sample();
 
-    read_input_buffer_from_host(buffer);
+    if (can_use_scratch) {
+        read_input_buffer_from_host(buffer);
+    } else {
+        read_input_buffer_from_host_direct(buffer);
+    }
+
     read_midi_from_host(host_midi_buffer, block_start_global_sample);
 
     parameters.update_inputs(processor.getPlayHead());
@@ -156,9 +188,15 @@ void Processor::processBlock(const juce::AudioProcessor& processor, juce::AudioB
 
     parameters.update_outputs();
 
-    write_output_buffer_to_host(buffer);
+    if (can_use_scratch) {
+        write_output_buffer_to_host(buffer);
+    } else {
+        write_output_buffer_to_host_direct(buffer);
+    }
+
     write_midi_to_host(host_midi_buffer, block_start_global_sample, block_size);
 }
+
 
 void Processor::releaseResources() {
     csound.release_resources();
@@ -413,5 +451,89 @@ void Processor::log(csd_plugin::LogLevel level, const char* text) {
         }
     });
 }
+
+void Processor::read_input_buffer_from_host_direct(juce::AudioBuffer<float>& buffer)
+{
+    const int csd_in_size = csound.get_io_layout().get_total_in_size();
+
+    if (csd_in_size <= 0)
+        return;
+
+    const int host_channels = buffer.getNumChannels();
+    const int num_frames = buffer.getNumSamples();
+
+    if (num_frames <= 0)
+        return;
+
+    const MYFLT scale =
+        static_cast<MYFLT>(csound.get_csound_settings().zero_dbfs);
+
+    auto& in_fifo = csound.get_audio_buffers().in();
+
+    bool did_resync = false;
+
+    for (int frame = 0; frame < num_frames; ++frame) {
+        for (int ch = 0; ch < csd_in_size; ++ch) {
+            float sample = 0.0f;
+
+            if (ch < host_channels) {
+                sample = buffer.getSample(ch, frame);
+            }
+
+            const MYFLT scaled = static_cast<MYFLT>(sample) * scale;
+
+            bool write_success = in_fifo.write(scaled);
+
+            if (!write_success) {
+                if (!did_resync) {
+                    csound.set_last_error("Host input FIFO overflow; resyncing");
+                    csound.resync_audio_buffers();
+                    did_resync = true;
+                }
+
+                // Try once more for this sample after resync.
+                write_success = in_fifo.write(scaled);
+
+                if (!write_success) {
+                    csound.set_last_error("Host input FIFO overflow after resync; dropping input sample");
+                }
+            }
+        }
+    }
+}
+
+void Processor::write_output_buffer_to_host_direct(juce::AudioBuffer<float>& buffer)
+{
+    const int csd_out_size = csound.get_io_layout().get_out_size();
+
+    if (csd_out_size <= 0)
+        return;
+
+    const int host_channels = buffer.getNumChannels();
+    const int num_frames = buffer.getNumSamples();
+
+    if (num_frames <= 0) {
+        buffer.clear();
+        return;
+    }
+
+    for (int frame = 0; frame < num_frames; ++frame) {
+        for (int ch = 0; ch < csd_out_size; ++ch) {
+            MYFLT sample = MYFLT{0};
+
+            // read_output() already applies inverse 0dBFS scaling and limiting.
+            csound.read_output(sample);
+
+            if (ch < host_channels) {
+                buffer.setSample(ch, frame, static_cast<float>(sample));
+            }
+        }
+
+        for (int ch = csd_out_size; ch < host_channels; ++ch) {
+            buffer.setSample(ch, frame, 0.0f);
+        }
+    }
+}
+
 
 }

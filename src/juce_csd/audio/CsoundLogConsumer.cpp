@@ -2,6 +2,11 @@
 
 namespace juce_csd {
 
+namespace {
+constexpr int MAX_PENDING_LOG_CHARS = 8192;
+constexpr juce::int64 MAX_LOG_FILE_BYTES = 1024 * 1024;
+}
+
 CsoundLogConsumer::CsoundLogConsumer(Processor& processor)
     : processorRef(processor)
 {
@@ -21,9 +26,9 @@ void CsoundLogConsumer::stop_consuming() {
     stopTimer();
 }
 
-void CsoundLogConsumer::enable_file_logging(const juce::File& logFile, const juce::String&
-welcomeMessage) {
-    fileLogger = std::make_unique<juce::FileLogger>(logFile, welcomeMessage, 1024 * 1024);
+void CsoundLogConsumer::enable_file_logging(const juce::File& logFile, const juce::String& welcomeMessage) {
+    fileLogger = std::make_unique<juce::FileLogger>(logFile, welcomeMessage, MAX_LOG_FILE_BYTES);
+    fileLogger->setFileSizeLimit(MAX_LOG_FILE_BYTES);
 }
 
 void CsoundLogConsumer::disable_file_logging() {
@@ -43,14 +48,18 @@ void CsoundLogConsumer::timerCallback() {
         receivedAnything = true;
 
         // If severity or source changes, flush the previous buffer first
-        if (!pendingText.isEmpty() && (msg.level != pendingLevel || msg.source !=
-pendingSource)) {
+        if (!pendingText.isEmpty() && (msg.level != pendingLevel || msg.source != pendingSource)) {
             flush_pending();
         }
 
         pendingLevel = msg.level;
         pendingSource = msg.source;
         pendingText += msg.text;
+
+        // Prevent unbounded growth if Csound keeps sending fragments without newlines.
+        if (pendingText.length() > MAX_PENDING_LOG_CHARS) {
+            flush_pending();
+        }
     }
 
     // 2. Flush logic:
@@ -68,7 +77,7 @@ pendingSource)) {
 void CsoundLogConsumer::flush_pending() {
     // Trim removes leading/trailing whitespace, preserving internal newlines
     juce::String cleanText = pendingText.trim();
-    pendingText.clear();
+    pendingText = juce::String();
 
     if (cleanText.isEmpty()) return;
 

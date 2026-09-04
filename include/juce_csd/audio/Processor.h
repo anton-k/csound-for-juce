@@ -80,8 +80,13 @@ class Processor {
   private:
     void read_midi_from_host(juce::MidiBuffer&, int64_t block_start_global_sample);
     void write_midi_to_host(juce::MidiBuffer&, int64_t block_start_sample, int block_size);
+
     void read_input_buffer_from_host(juce::AudioBuffer<float>&);
     void write_output_buffer_to_host(juce::AudioBuffer<float>&);
+
+    void read_input_buffer_from_host_direct(juce::AudioBuffer<float>&);
+    void write_output_buffer_to_host_direct(juce::AudioBuffer<float>&);
+
     bool pop_log(LogMessage& msg);
 
     std::vector<MYFLT> host_input_scratch;

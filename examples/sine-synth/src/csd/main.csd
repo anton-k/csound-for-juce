@@ -3,8 +3,8 @@
 
 </CsOptions>
 <CsInstruments>
-sr      =  48000
-ksmps   =  32
+sr      =  44100
+ksmps   =  64
 nchnls  =  2
 nchnls_i = 0
 0dbfs   =  1.0
@@ -19,7 +19,6 @@ chn_k "release", 1, 2, 0.6, 0, 1
 
         instr main
 kgain chngetk "gain"
-printk2 kgain
 
 iattack chnget "attack"
 iattack = iattack + 0.01

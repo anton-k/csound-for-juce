@@ -6,6 +6,7 @@
 
 # Core Rules (Strictly Enforced)
 1. Real-time code should have no memory allocation or perform operations whith unbounded performance time.
+2. Csound does not have methods Stop() and Cleanup()!!!
 
 # Structure of the library
 

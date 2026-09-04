@@ -10,7 +10,7 @@ inline constexpr int MIDI_DATA_SIZE = 4;
 
 /// Raw midi event
 struct RawMidiEvent {
-    int64_t samplePosition;  // Timestamp relative to the start of the current audio block
+    int64_t samplePosition;  // Global timestamp in samples since prepare_to_play()
     uint8_t size;            // Number of valid bytes (1 to 3 for standard MIDI)
     uint8_t data[MIDI_DATA_SIZE];         // Raw MIDI bytes (padded to 4 bytes for perfect 32-bit memory alignment)
 
