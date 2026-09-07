@@ -28,7 +28,7 @@ void CsoundLogConsumer::stop_consuming() {
 
 void CsoundLogConsumer::enable_file_logging(const juce::File& logFile, const juce::String& welcomeMessage) {
     fileLogger = std::make_unique<juce::FileLogger>(logFile, welcomeMessage, MAX_LOG_FILE_BYTES);
-    fileLogger->setFileSizeLimit(MAX_LOG_FILE_BYTES);
+    // fileLogger->setFileSizeLimit(MAX_LOG_FILE_BYTES);
 }
 
 void CsoundLogConsumer::disable_file_logging() {
