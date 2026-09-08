@@ -1,3 +1,4 @@
 build:
     cmake -B build -G Ninja
     cmake --build build
+    cp -r /home/anton/dev/cpp/learn/csound-for-juce/examples/reverb/build/src/ReverbCsdExample_artefacts//VST3/ReverbCsdExample.vst3 ~/music/vst/

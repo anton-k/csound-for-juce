@@ -76,14 +76,14 @@ void CsoundSettings::set_channel_names(Csound *csound) {
 
 bool CsdOutputAudioBuffer::read(MYFLT &sample) {
   if (read_index >= capacity) {
+    sample = default_value;
     return false;
   } else {
     if (ptr == nullptr) {
-      sample = 0.0;
+      sample = default_value;
       return false;
     }
-    sample =
-        wrap_limiter((!read_default ? ptr[read_index] : default_value) * scale);
+    sample = wrap_limiter(ptr[read_index] * scale);
     read_index++;
     return true;
   }
@@ -337,6 +337,15 @@ bool Processor::prepare_to_play(int host_sample_rate) {
 
   ready_to_play.store(true, std::memory_order_release);
   log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true");
+  log(LogLevel::Info,
+      std::format("\ncsd_in {}, csd_out {}", csound->GetChannels(1),
+                  csound->GetChannels(0))
+          .c_str());
+  log(LogLevel::Info,
+      std::format("\nin {}, out {}", io_layout.get_total_in_size(),
+                  io_layout.get_out_size())
+          .c_str());
+
   return true;
 }
 
@@ -369,14 +378,21 @@ void Processor::prepare_audio_buffers() {
 bool Processor::process() {
   if (!ready_to_play.load())
     return false;
-  int result = csound->PerformKsmps();
-  if (result != 0) {
-    return false;
-  }
+  bool ok = csound->PerformKsmps() == 0;
+  if (!ok) {
+    for (int retry_index = 0; retry_index < 2; ++retry_index) {
 
+      csound->Reset();
+      ok = csound->PerformKsmps() == 0;
+      if (ok) {
+        break;
+      }
+    }
+  }
   audio_buffers.reset();
+  audio_buffers.csound_performed();
   timer.next(csound_settings.ksmps);
-  return true;
+  return ok;
 }
 
 void Processor::release_resources() {

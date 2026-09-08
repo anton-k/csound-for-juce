@@ -1,3 +1,5 @@
 build:
     cmake -B build -G Ninja
     cmake --build build
+    cp -r /home/anton/dev/cpp/learn/csound-for-juce/examples/sine-synth/build/src/SineCsdExample_artefacts//VST3/SineCsdExample.vst3 ~/music/vst/
+

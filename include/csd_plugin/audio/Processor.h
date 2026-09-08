@@ -166,6 +166,8 @@ public:
     if (csound != nullptr) {
       ptr = csound->GetSpout();
     }
+
+    read_index = capacity;
   };
 
   int get_size() { return capacity - read_index; }
@@ -174,16 +176,9 @@ public:
     return (ptr != nullptr && capacity > 0 && csound != nullptr);
   }
 
-  void reset() {
-    read_index = 0;
-    read_default = false;
-  }
+  void reset() { read_index = capacity; }
 
-  void reset_and_fill(MYFLT sample) {
-    read_index = 0;
-    default_value = sample;
-    read_default = true;
-  }
+  void csound_performed() { read_index = 0; }
 
   bool read(MYFLT &sample);
 
@@ -202,7 +197,6 @@ private:
   int capacity{0};
   MYFLT scale{1.0};
   MYFLT default_value{0.0};
-  bool read_default{false};
   int channel_size{0};
 };
 
@@ -214,11 +208,9 @@ public:
       : input_buffer(csound, settings.ksmps * io_layout.get_total_in_size(),
                      settings.zero_dbfs, io_layout.get_total_in_size()),
         output_buffer(csound, settings.ksmps * io_layout.get_out_size(),
-                      settings.inverse_zero_dbfs, io_layout.get_out_size()),
-        has_prefill_output(io_layout.get_total_in_size() > 0 &&
-                           io_layout.get_out_size() > 0) {
-    if (has_prefill_output) {
-      output_buffer.reset_and_fill(0.0);
+                      settings.inverse_zero_dbfs, io_layout.get_out_size()) {
+    if (io_layout.get_total_in_size() > 0 && io_layout.get_out_size() > 0) {
+      output_buffer.csound_performed();
     }
   }
 
@@ -232,16 +224,12 @@ public:
 
   bool read(MYFLT &sample) { return output_buffer.read(sample); }
 
-  void clear() {
-    input_buffer.reset();
-    if (has_prefill_output) {
-      output_buffer.reset_and_fill(0.0);
-    } else {
-      output_buffer.reset();
-    }
-  }
+  void clear() { reset(); }
 
   int available_output_frames() { return output_buffer.available_frames(); }
+  int get_free_frames() { return input_buffer.get_free_frames(); }
+
+  void csound_performed() { output_buffer.csound_performed(); }
 
   void reset() {
     input_buffer.reset();
@@ -253,7 +241,6 @@ private:
   CsdOutputAudioBuffer &out() { return output_buffer; }
   CsdInputAudioBuffer input_buffer;
   CsdOutputAudioBuffer output_buffer;
-  bool has_prefill_output{false};
 };
 
 class Timer {

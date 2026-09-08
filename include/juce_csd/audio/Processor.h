@@ -212,7 +212,7 @@ private:
   void process_no_in_out(juce::AudioBuffer<float> &buffer);
   void process_in_no_out(juce::AudioBuffer<float> &buffer);
   void process_no_in_no_out(juce::AudioBuffer<float> &buffer);
-  void csound_process();
+  bool csound_process();
   static ProcessorType
   get_processor_type(const csd_plugin::IOLayout &io_layout);
 
@@ -226,7 +226,7 @@ private:
 
   ProcessorSync sync;
   ProcessorType processor_type{InOut};
-  std::atomic<bool> lifecycle_error{false};
+  // std::atomic<bool> lifecycle_error{false};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
 };
