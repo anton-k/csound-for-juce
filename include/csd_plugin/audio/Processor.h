@@ -1,14 +1,16 @@
 #pragma once
 
+#include "AudioBuffer.h"
 #include "MidiBuffer.h"
 #include "csd_plugin/audio/Logger.h"
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <csound/csound.hpp>
+#include <csound/sysdep.h>
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
-#include <csound/csound.hpp>
-#include <csound/sysdep.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -19,6 +21,13 @@
 namespace csd_plugin {
 
 inline constexpr MYFLT WRAP_VOLUME_LIMIT = static_cast<MYFLT>(5.0f);
+
+inline MYFLT wrap_limiter(MYFLT sample) {
+  if (!std::isfinite(static_cast<double>(sample))) {
+    return MYFLT{0};
+  }
+  return std::clamp(sample, -WRAP_VOLUME_LIMIT, WRAP_VOLUME_LIMIT);
+}
 
 /// Settings for Csound file
 struct CsoundSettings {
@@ -105,57 +114,44 @@ struct IOLayout {
 class CsdInputAudioBuffer {
 public:
   CsdInputAudioBuffer() = default;
-  CsdInputAudioBuffer(Csound *csound_, int size_, MYFLT scale_,
-                      int channel_size_)
-      : csound(csound_), capacity(size_), scale(scale_),
-        channel_size(channel_size_) {
-    if (csound != nullptr) {
-      ptr = csound->GetSpin();
+  CsdInputAudioBuffer(int size_, MYFLT scale_, int channel_size_)
+      : capacity(size_), scale(scale_), channel_size(channel_size_) {
+    if (capacity > 0) {
+      // Allocate extra space to accommodate block-size mismatches
+      buffer.reset(capacity * 2);
     }
   }
 
-  bool is_valid() const {
-    return (ptr != nullptr && capacity > 0 && csound != nullptr);
-  }
-
-  int get_capacity() const { return std::max(capacity - write_index, 0); }
-
-  bool is_full() const { return write_index >= capacity; }
+  bool is_valid() const { return capacity > 0; }
+  int get_capacity() const { return capacity; }
+  bool is_full() const { return buffer.get_size() >= capacity; }
 
   int get_free_frames() const {
-    if (channel_size == 0) {
+    if (channel_size == 0)
       return 0;
-    } else {
-      return get_capacity() / channel_size;
-    }
+    return buffer.get_free_space() / channel_size;
   }
 
-  void reset() {
-    write_index = 0;
-
-    if (ptr == nullptr || capacity <= 0) {
+  void feed_csound_spin(MYFLT *spin, int ksmps) {
+    if (spin == nullptr || capacity <= 0)
       return;
-    }
-
-    for (int index = 0; index < capacity; ++index) {
-      ptr[index] = static_cast<MYFLT>(0.0);
+    int total_samples = ksmps * channel_size;
+    int read_count = buffer.read_block_partial(spin, total_samples);
+    for (int i = read_count; i < total_samples; ++i) {
+      spin[i] = 0.0;
     }
   }
 
   bool write(MYFLT sample) {
-    if (ptr == nullptr || write_index >= capacity) {
+    if (capacity <= 0)
       return false;
-    } else {
-      ptr[write_index] = sample * scale;
-      write_index++;
-      return true;
-    }
+    return buffer.write(sample * scale);
   }
 
+  void clear() { buffer.clear(); }
+
 private:
-  Csound *csound{nullptr};
-  MYFLT *ptr{nullptr};
-  int write_index{0};
+  AudioBuffer<MYFLT> buffer;
   int capacity{0};
   MYFLT scale{1.0};
   int channel_size{0};
@@ -164,66 +160,75 @@ private:
 class CsdOutputAudioBuffer {
 public:
   CsdOutputAudioBuffer() = default;
-  CsdOutputAudioBuffer(Csound *csound_, int size_, MYFLT scale_,
-                       int channel_size_)
-      : csound(csound_), capacity(size_), scale(scale_),
-        channel_size(channel_size_) {
-    if (csound != nullptr) {
-      ptr = csound->GetSpout();
+  CsdOutputAudioBuffer(int size_, MYFLT scale_, int channel_size_)
+      : capacity(size_), scale(scale_), channel_size(channel_size_) {
+    if (capacity > 0) {
+      // Allocate extra space to accommodate prefill and block-size mismatches
+      buffer.reset(capacity * 2);
     }
-
-    read_index = capacity;
-  };
-
-  int get_size() const { return capacity - read_index; }
-
-  bool is_valid() const {
-    return (ptr != nullptr && capacity > 0 && csound != nullptr);
   }
 
-  void reset() { read_index = capacity; }
+  int get_size() const { return buffer.get_size(); }
+  bool is_valid() const { return capacity > 0; }
 
-  void csound_performed() { read_index = 0; }
+  void collect_csound_spout(const MYFLT *spout, int ksmps) {
+    if (spout == nullptr || capacity <= 0)
+      return;
+    int total_samples = ksmps * channel_size;
+    for (int i = 0; i < total_samples; ++i) {
+      buffer.write(wrap_limiter(spout[i] * scale));
+    }
+  }
 
-  bool read(MYFLT &sample);
+  bool read(MYFLT &sample) {
+    if (capacity <= 0) {
+      sample = 0.0;
+      return false;
+    }
+    bool ok = buffer.read(sample);
+    if (!ok) {
+      sample = 0.0;
+    }
+    return ok;
+  }
 
   int available_frames() const {
-    if (channel_size == 0) {
+    if (channel_size == 0)
       return 0;
-    } else {
-      return get_size() / channel_size;
+    return buffer.get_size() / channel_size;
+  }
+
+  void prefill_zeroes(int num_samples) {
+    for (int i = 0; i < num_samples; ++i) {
+      buffer.write(0.0);
     }
   }
 
+  void clear() { buffer.clear(); }
+
 private:
-  Csound *csound{nullptr};
-  const MYFLT *ptr{nullptr};
-  int read_index{0};
+  AudioBuffer<MYFLT> buffer;
   int capacity{0};
   MYFLT scale{1.0};
-  MYFLT default_value{0.0};
   int channel_size{0};
 };
 
 class CsdAudioBuffers {
 public:
   CsdAudioBuffers() = default;
-  CsdAudioBuffers(Csound *csound, const CsoundSettings &settings,
-                  const IOLayout &io_layout)
-      : input_buffer(csound, settings.ksmps * io_layout.get_total_in_size(),
+  CsdAudioBuffers(const CsoundSettings &settings, const IOLayout &io_layout)
+      : input_buffer(settings.ksmps * io_layout.get_total_in_size(),
                      settings.zero_dbfs, io_layout.get_total_in_size()),
-        output_buffer(csound, settings.ksmps * io_layout.get_out_size(),
+        output_buffer(settings.ksmps * io_layout.get_out_size(),
                       settings.inverse_zero_dbfs, io_layout.get_out_size()),
         has_input(io_layout.get_total_in_size() > 0),
-        has_output(io_layout.get_out_size() > 0),
-        initialized(true) {
-    // Do not expose Csound output before the first successful PerformKsmps().
-    //
-    // Csound's spout may be uninitialized before the first processing cycle,
-    // and exposing it here can cause clicks, harsh noise, or garbage samples.
-    //
-    // For FX layouts this means the first ksmps samples are silence, which
-    // matches the reported latency.
+        has_output(io_layout.get_out_size() > 0), initialized(true) {
+    // Prefill output buffer with zeroes for FX (input && output) to compensate
+    // latency
+    if (has_input && has_output) {
+      int prefill_samples = settings.ksmps * io_layout.get_out_size();
+      output_buffer.prefill_zeroes(prefill_samples);
+    }
   }
 
   bool is_valid() const {
@@ -237,7 +242,10 @@ public:
 
   bool read(MYFLT &sample) { return output_buffer.read(sample); }
 
-  void clear() { reset(); }
+  void clear() {
+    input_buffer.clear();
+    output_buffer.clear();
+  }
 
   int available_output_frames() const {
     return output_buffer.available_frames();
@@ -245,12 +253,21 @@ public:
 
   int get_free_frames() const { return input_buffer.get_free_frames(); }
 
-  void csound_performed() { output_buffer.csound_performed(); }
-
-  void reset() {
-    input_buffer.reset();
-    output_buffer.reset();
+  void prepare_for_csound(Csound *csound, int ksmps) {
+    if (has_input) {
+      input_buffer.feed_csound_spin(csound->GetSpin(), ksmps);
+    }
   }
+
+  void collect_from_csound(Csound *csound, int ksmps) {
+    if (has_output) {
+      output_buffer.collect_csound_spout(csound->GetSpout(), ksmps);
+    }
+  }
+
+  void csound_performed() {}
+
+  void reset() {}
 
 private:
   CsdInputAudioBuffer input_buffer;

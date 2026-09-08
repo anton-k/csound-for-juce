@@ -24,16 +24,16 @@ kcutOff chngetk "tone"
 kmix chngetk "mix"
 
 ainL, ainR  inch 1, 2
-;awetL, awetR  reverbsc ainL, ainR, kfeedback, 20000 * kcutOff
-;kReverbGain = 2
-; aoutL = (1 - kmix) * ainL + kmix * (kReverbGain * awetL)
-; aoutR = (1 - kmix) * ainR + kmix * (kReverbGain * awetR)
-outs ainL, ainR ; aoutL, aoutR
+awetL, awetR  reverbsc ainL, ainR, kfeedback, 20000 * kcutOff
+kReverbGain = 2
+aoutL = (1 - kmix) * ainL + kmix * (kReverbGain * awetL)
+aoutR = (1 - kmix) * ainR + kmix * (kReverbGain * awetR)
+outs aoutL, aoutR
 endin
 </CsInstruments>
 <CsScore>
-f 0 360000
+f 0 z
 i 1 0 -1
-e
+
 </CsScore>
 </CsoundSynthesizer>

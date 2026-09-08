@@ -17,14 +17,6 @@ namespace csd_plugin {
 
 namespace {
 
-inline MYFLT wrap_limiter(MYFLT sample) {
-  if (!std::isfinite(static_cast<double>(sample))) {
-    return MYFLT{0};
-  }
-
-  return std::clamp(sample, -WRAP_VOLUME_LIMIT, WRAP_VOLUME_LIMIT);
-}
-
 bool is_control_channel_type(controlChannelInfo_t info) {
   return (info.type & CSOUND_CHANNEL_TYPE_MASK) == CSOUND_CONTROL_CHANNEL;
 }
@@ -72,21 +64,6 @@ void CsoundSettings::set_channel_names(Csound *csound) {
   }
 
   csound->DeleteChannelList(channel_list);
-}
-
-bool CsdOutputAudioBuffer::read(MYFLT &sample) {
-  if (read_index >= capacity) {
-    sample = default_value;
-    return false;
-  } else {
-    if (ptr == nullptr) {
-      sample = default_value;
-      return false;
-    }
-    sample = wrap_limiter(ptr[read_index] * scale);
-    read_index++;
-    return true;
-  }
 }
 
 int Processor::get_latency_samples() {
@@ -357,8 +334,7 @@ bool Processor::prepare_to_play(int host_sample_rate) {
   ready_to_play.store(true, std::memory_order_release);
   log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true");
   log(LogLevel::Info,
-      std::format("\ncsd_in {}, csd_out {}",
-                  csound->GetChannels(1),
+      std::format("\ncsd_in {}, csd_out {}", csound->GetChannels(1),
                   csound->GetChannels(0))
           .c_str());
   log(LogLevel::Info,
@@ -396,25 +372,19 @@ bool Processor::prepare_csound_to_play(int sample_rate) {
 }
 
 void Processor::prepare_audio_buffers() {
-  audio_buffers = CsdAudioBuffers(csound.get(), csound_settings, io_layout);
+  audio_buffers = CsdAudioBuffers(csound_settings, io_layout);
 }
 
 bool Processor::process() {
   if (!ready_to_play.load())
     return false;
 
+  audio_buffers.prepare_for_csound(csound.get(), csound_settings.ksmps);
+
   bool ok = csound->PerformKsmps() == 0;
 
-  // Reset input state for the next Csound cycle.
-  audio_buffers.reset();
-
   if (ok) {
-    // Expose output only if Csound actually produced a valid cycle.
-    //
-    // If PerformKsmps() failed, Csound's spout may contain stale or invalid
-    // data. Keeping the output buffer empty makes the caller produce silence
-    // instead of harsh noise.
-    audio_buffers.csound_performed();
+    audio_buffers.collect_from_csound(csound.get(), csound_settings.ksmps);
     timer.next(csound_settings.ksmps);
   } else {
     // Do not call Csound::Reset() here.
@@ -526,8 +496,7 @@ bool Processor::validate_io_layout() {
 
   // If the plugin does not use audio input/output, do not fail just because
   // the CSD defines some default channel count.
-  const bool in_ok =
-      (expected_in == 0) || (csound_in_channels == expected_in);
+  const bool in_ok = (expected_in == 0) || (csound_in_channels == expected_in);
 
   const bool out_ok =
       (expected_out == 0) || (csound_out_channels == expected_out);

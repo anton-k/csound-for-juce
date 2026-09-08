@@ -255,6 +255,81 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
   }
 }
 
+// void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
+//   const int block_size = buffer.getNumSamples();
+//   if (block_size <= 0)
+//     return;
+
+//   const int host_channels = buffer.getNumChannels();
+//   const auto &layout = csound.get_io_layout();
+//   const int in_size = layout.get_total_in_size();
+//   const int out_size = layout.get_out_size();
+//   const int ksmps = csound.get_csound_settings().ksmps;
+
+//   if (in_size <= 0 || out_size <= 0 || ksmps <= 0) {
+//     buffer.clear();
+//     return;
+//   }
+
+//   csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
+
+//   if (!csound.is_ready_to_play() || !csd_buffers.is_valid()) {
+//     buffer.clear();
+//     return;
+//   }
+
+//   for (int frame = 0; frame < block_size; ++frame) {
+//     // If a full Csound input cycle is ready, run Csound before writing the
+//     // next host frame.
+//     //
+//     // This prevents input-buffer overflow and returns the previous Csound
+//     // cycle with the expected ksmps latency.
+//     if (csd_buffers.is_full()) {
+//       if (!csound_process()) {
+//         for (int ch = 0; ch < host_channels; ++ch) {
+//           buffer.clear(ch, frame, block_size - frame);
+//         }
+//         return;
+//       }
+//     }
+
+//     // Write one host frame into Csound's input buffer.
+//     for (int in_ch = 0; in_ch < in_size; ++in_ch) {
+//       MYFLT input_sample =
+//           (in_ch < host_channels)
+//               ? static_cast<MYFLT>(buffer.getSample(in_ch, frame))
+//               : 0.0;
+
+//       csd_buffers.write(input_sample);
+//     }
+
+//     // Read one host frame from Csound's output buffer if it is available.
+//     //
+//     // For FX plugins, output is delayed by ksmps samples. Before the first
+//     // full Csound cycle has completed, this naturally outputs silence
+//     instead
+//     // of uninitialized Csound memory.
+//     const bool has_output = (csd_buffers.available_output_frames() > 0);
+
+//     for (int out_ch = 0; out_ch < out_size; ++out_ch) {
+//       MYFLT output_sample = 0.0;
+
+//       if (has_output) {
+//         csd_buffers.read(output_sample);
+//       }
+
+//       if (out_ch < host_channels) {
+//         buffer.setSample(out_ch, frame, static_cast<float>(output_sample));
+//       }
+//     }
+
+//     // Clear extra host channels that are not used by the Csound layout.
+//     for (int ch = out_size; ch < host_channels; ++ch) {
+//       buffer.setSample(ch, frame, 0.0f);
+//     }
+//   }
+// }
+
 bool Processor::csound_process() {
   parameters.update_krate_params(csound.get_csound_settings().ksmps);
   return csound.process();
