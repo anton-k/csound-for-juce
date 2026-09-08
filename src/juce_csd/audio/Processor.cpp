@@ -119,7 +119,7 @@ void Processor::process_no_in_out(juce::AudioBuffer<float> &buffer) {
     }
   }
 }
-
+/*
 void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
   int block_size = buffer.getNumSamples();
   int csound_cycle_size = csound.get_csound_cycle_size(block_size);
@@ -190,6 +190,7 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
     }
   }
 }
+*/
 
 void Processor::process_in_no_out(juce::AudioBuffer<float> &buffer) {
   int block_size = buffer.getNumSamples();
@@ -219,7 +220,6 @@ void Processor::process_in_no_out(juce::AudioBuffer<float> &buffer) {
   }
 }
 
-/*
 void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
   const int block_size = buffer.getNumSamples();
   if (block_size <= 0)
@@ -299,7 +299,6 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
     }
   }
 }
-*/
 
 /*
 void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
@@ -417,14 +416,14 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
   // JUCE plugins should enforce it at the entry point to
   // prevent massive CPU spikes on x86 architectures.
   const juce::ScopedNoDenormals noDenormals;
-
-  if (!sync.start_process_block()) {
-    buffer.clear();
-    host_midi_buffer.clear();
-    return;
-  }
-  ScopedStage guard(sync, ProcessorStage::ProcessBlock);
-
+  /*
+    if (!sync.start_process_block()) {
+      buffer.clear();
+      host_midi_buffer.clear();
+      return;
+    }
+    ScopedStage guard(sync, ProcessorStage::ProcessBlock);
+  */
   if (/*lifecycle_error.load(std::memory_order_acquire) ||*/
       !csound.is_ready_to_play()) {
     buffer.clear();
@@ -493,14 +492,14 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
 }
 
 void Processor::releaseResources() {
-
-  if (!sync.start_release_resources()) {
-    log(csd_plugin::LogLevel::Error,
-        "Could not acquire processor stage for releaseResources");
-    return;
-  }
-  ScopedStage guard(sync, ProcessorStage::ReleaseResources);
-
+  /*
+    if (!sync.start_release_resources()) {
+      log(csd_plugin::LogLevel::Error,
+          "Could not acquire processor stage for releaseResources");
+      return;
+    }
+    ScopedStage guard(sync, ProcessorStage::ReleaseResources);
+  */
   csound.release_resources();
 }
 
