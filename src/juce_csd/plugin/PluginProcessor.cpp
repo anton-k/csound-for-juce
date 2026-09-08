@@ -3,6 +3,7 @@
 #include <juce_csd/plugin/PluginProcessor.h>
 #include <csound/csound.h>
 #include <juce_events/juce_events.h>
+#include <limits>
 #include <string>
 #include "juce_core/juce_core.h"
 #include <juce_csd/params/Parameters.h>
@@ -16,22 +17,35 @@ namespace juce_csd {
 juce::AudioProcessor::BusesProperties PluginProcessor::make_buses_properties(const csd_plugin::IOLayout& io_layout) {
     BusesProperties bp;
 
-    switch (io_layout.in_size) {
-        case 1: bp.addBus(true, "Input", juce::AudioChannelSet::mono(), true); break;
-        case 2: bp.addBus(true, "Input", juce::AudioChannelSet::stereo(), true); break;
+    if (io_layout.in_size > 0) {
+        if (io_layout.in_size == 1) {
+            bp.addBus(true, "Input", juce::AudioChannelSet::mono(), true);
+        } else if (io_layout.in_size == 2) {
+            bp.addBus(true, "Input", juce::AudioChannelSet::stereo(), true);
+        } else {
+            bp.addBus(true, "Input", juce::AudioChannelSet::discreteChannels(io_layout.in_size), true);
+        }
     }
 
-    switch (io_layout.out_size) {
-        case 1: bp.addBus(false, "Output", juce::AudioChannelSet::mono(), true); break;
-        case 2: bp.addBus(false, "Output", juce::AudioChannelSet::stereo(), true); break;
+    if (io_layout.out_size > 0) {
+        if (io_layout.out_size == 1) {
+            bp.addBus(false, "Output", juce::AudioChannelSet::mono(), true);
+        } else if (io_layout.out_size == 2) {
+            bp.addBus(false, "Output", juce::AudioChannelSet::stereo(), true);
+        } else {
+            bp.addBus(false, "Output", juce::AudioChannelSet::discreteChannels(io_layout.out_size), true);
+        }
     }
 
-    // Standalon JUCE app has no support for sidechain inputs
+    // Standalone JUCE app has no support for sidechain inputs
     if (!juce::JUCEApplicationBase::isStandaloneApp()) {
         if (io_layout.sidechain_size > 0) {
-            switch (io_layout.sidechain_size) {
-                case 1: bp.addBus(true, "Sidechain", juce::AudioChannelSet::mono(), true); break;
-                case 2: bp.addBus(true, "Sidechain", juce::AudioChannelSet::stereo(), true); break;
+            if (io_layout.sidechain_size == 1) {
+                bp.addBus(true, "Sidechain", juce::AudioChannelSet::mono(), true);
+            } else if (io_layout.sidechain_size == 2) {
+                bp.addBus(true, "Sidechain", juce::AudioChannelSet::stereo(), true);
+            } else {
+                bp.addBus(true, "Sidechain", juce::AudioChannelSet::discreteChannels(io_layout.sidechain_size), true);
             }
         }
     }
@@ -123,12 +137,37 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     auto layout = csound.get_io_layout();
 
-    return (layouts.getMainOutputChannelSet().size() == layout.get_out_size()
-     && (layouts.getMainInputChannelSet().size() == layout.get_total_in_size() ||
-         layouts.getMainInputChannelSet().size() == layout.in_size
-        )
+    const int mainIn = layouts.getMainInputChannelSet().size();
 
-    );
+    int totalIn = 0;
+    for (const auto& bus : layouts.inputBuses) {
+        totalIn += bus.size();
+    }
+
+    const int scIn = (totalIn > mainIn) ? (totalIn - mainIn) : 0;
+    const int out = layouts.getMainOutputChannelSet().size();
+
+    if (out != layout.get_out_size()) {
+        return false;
+    }
+
+    if (layout.sidechain_size > 0) {
+        if (juce::JUCEApplicationBase::isStandaloneApp()) {
+            // Standalone apps do not provide a separate sidechain bus.
+            return scIn == 0 &&
+                   (totalIn == layout.get_total_in_size() || mainIn == layout.in_size);
+        }
+
+        if (layout.in_size == 0) {
+            return totalIn == layout.sidechain_size;
+        }
+
+        return mainIn == layout.in_size &&
+               scIn == layout.sidechain_size &&
+               totalIn == layout.get_total_in_size();
+    }
+
+    return mainIn == layout.in_size && totalIn == layout.in_size;
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,

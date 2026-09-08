@@ -42,6 +42,11 @@ Processor::Processor(const std::string &csd_file_content,
   });
 }
 
+Processor::~Processor() {
+  // Clear the callback before log_queue and related members are destroyed.
+  csound.set_log_callback(nullptr);
+}
+
 void Processor::prepareToPlay(double sample_rate, int max_block_size) {
   juce::ignoreUnused(max_block_size);
 
@@ -52,16 +57,19 @@ void Processor::prepareToPlay(double sample_rate, int max_block_size) {
 
   ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
 
+  processor_type = get_processor_type(csound.get_io_layout());
+
   bool ok = csound.prepare_to_play(static_cast<int>(std::round(sample_rate)));
   if (ok && csound.is_ready_to_play()) {
     parameters.prepare(csound.get_csound(), sample_rate);
-    processor_type = get_processor_type(csound.get_io_layout());
   } else {
     log(csd_plugin::LogLevel::Error, "Csound prepare_to_play failed");
   }
 }
 
 void Processor::process_no_in_no_out(juce::AudioBuffer<float> &buffer) {
+  buffer.clear();
+
   int block_size = buffer.getNumSamples();
   if (block_size <= 0) {
     return;
@@ -69,7 +77,9 @@ void Processor::process_no_in_no_out(juce::AudioBuffer<float> &buffer) {
 
   int csound_cycle_size = csound.get_csound_cycle_size(block_size);
   for (int index = 0; index < csound_cycle_size; ++index) {
-    csound_process();
+    if (!csound_process()) {
+      return;
+    }
   }
 }
 
@@ -98,6 +108,13 @@ void Processor::process_no_in_out(juce::AudioBuffer<float> &buffer) {
   for (int frame = 0; frame < block_size; ++frame) {
     if (csd_buffers.available_output_frames() == 0) {
       if (!csound_process()) {
+        for (int ch = 0; ch < host_channels; ++ch) {
+          buffer.clear(ch, frame, block_size - frame);
+        }
+        return;
+      }
+
+      if (csd_buffers.available_output_frames() == 0) {
         for (int ch = 0; ch < host_channels; ++ch) {
           buffer.clear(ch, frame, block_size - frame);
         }
@@ -138,9 +155,11 @@ void Processor::process_in_no_out(juce::AudioBuffer<float> &buffer) {
 
   for (int frame_index = 0; frame_index < block_size; ++frame_index) {
     if (csd_buffers.is_full()) {
-      bool is_ok = csound_process();
-      if (!is_ok) {
-        csd_buffers.clear();
+      if (!csound_process()) {
+        for (int ch = 0; ch < channel_size; ++ch) {
+          buffer.clear(ch, frame_index, block_size - frame_index);
+        }
+        return;
       }
     }
 
@@ -192,13 +211,11 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
     // This prevents input-buffer overflow and returns the previous Csound
     // cycle with the expected ksmps latency.
     if (csd_buffers.is_full()) {
-      const bool process_ok = csound_process();
-
-      if (!process_ok) {
-        // If Csound cannot process, keep this block safe by clearing the
-        // local Csound buffers. The host output for this frame will become
-        // silence below.
-        csd_buffers.clear();
+      if (!csound_process()) {
+        for (int ch = 0; ch < host_channels; ++ch) {
+          buffer.clear(ch, frame, block_size - frame);
+        }
+        return;
       }
     }
 
@@ -283,6 +300,13 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
     return;
   }
 
+  const int block_size = buffer.getNumSamples();
+
+  if (block_size <= 0) {
+    host_midi_buffer.clear();
+    return;
+  }
+
   // Check if the host has bypassed the plugin
   bool is_bypassed = false;
 
@@ -291,22 +315,30 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
   }
 
   if (is_bypassed) {
-    // Hard bypass for now.
-    //
-    // TODO:
-    // For FX plugins, dry-through or crossfade bypass would be better.
-    // But for FIFO stability, the important part is that we resynchronize
-    // when entering/leaving bypass.
+    const auto &layout = csound.get_io_layout();
+    const int host_channels = buffer.getNumChannels();
+    const int main_in_size = layout.in_size;
+    const int out_size = layout.get_out_size();
+
+    // For effect plugins, pass dry audio through instead of hard-silencing.
+    // This avoids the most obvious click/silence problem on bypass.
+    if (main_in_size > 0 && out_size > 0 && host_channels > 0) {
+      for (int ch = 0; ch < host_channels; ++ch) {
+        if (ch < out_size) {
+          if (ch >= main_in_size) {
+            // Duplicate the first main input channel for extra output channels.
+            buffer.copyFrom(ch, 0, buffer, 0, 0, block_size);
+          }
+        } else {
+          buffer.clear(ch, 0, block_size);
+        }
+      }
+    } else {
+      buffer.clear();
+    }
+
     csound.get_audio_buffers().clear();
     csound.get_midi_buffers().clear();
-    buffer.clear();
-    host_midi_buffer.clear();
-    return;
-  }
-
-  const int block_size = buffer.getNumSamples();
-
-  if (block_size <= 0) {
     host_midi_buffer.clear();
     return;
   }
@@ -404,6 +436,12 @@ void Processor::write_midi_to_host(juce::MidiBuffer &host_midi_messages,
   csd_plugin::RawMidiEvent csd_midi_event;
 
   while (csd_midi_buffer.peek(csd_midi_event)) {
+    // Drop stale events that are already before this block.
+    if (csd_midi_event.samplePosition < block_start_sample) {
+      csd_midi_buffer.pop();
+      continue;
+    }
+
     // Leave future events in the queue for the next host block.
     if (csd_midi_event.samplePosition >= block_end_sample) {
       break;

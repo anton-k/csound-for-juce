@@ -4,12 +4,16 @@
 #include "csd_plugin/audio/Logger.h"
 #include <algorithm>
 #include <atomic>
+#include <cstdarg>
+#include <cstdint>
+#include <cstring>
 #include <csound/csound.hpp>
 #include <csound/sysdep.h>
-#include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 namespace csd_plugin {
@@ -85,7 +89,7 @@ struct IOLayout {
     return layout;
   };
 
-  IOLayout with_sidechain(int size) {
+  IOLayout with_sidechain(int size) const {
     IOLayout layout(*this);
     layout.sidechain_size = size;
     return layout;
@@ -114,11 +118,11 @@ public:
     return (ptr != nullptr && capacity > 0 && csound != nullptr);
   }
 
-  int get_capacity() { return std::max(capacity - write_index, 0); }
+  int get_capacity() const { return std::max(capacity - write_index, 0); }
 
-  bool is_full() { return write_index >= capacity; }
+  bool is_full() const { return write_index >= capacity; }
 
-  int get_free_frames() {
+  int get_free_frames() const {
     if (channel_size == 0) {
       return 0;
     } else {
@@ -171,7 +175,7 @@ public:
     read_index = capacity;
   };
 
-  int get_size() { return capacity - read_index; }
+  int get_size() const { return capacity - read_index; }
 
   bool is_valid() const {
     return (ptr != nullptr && capacity > 0 && csound != nullptr);
@@ -183,7 +187,7 @@ public:
 
   bool read(MYFLT &sample);
 
-  int available_frames() {
+  int available_frames() const {
     if (channel_size == 0) {
       return 0;
     } else {
@@ -209,7 +213,10 @@ public:
       : input_buffer(csound, settings.ksmps * io_layout.get_total_in_size(),
                      settings.zero_dbfs, io_layout.get_total_in_size()),
         output_buffer(csound, settings.ksmps * io_layout.get_out_size(),
-                      settings.inverse_zero_dbfs, io_layout.get_out_size()) {
+                      settings.inverse_zero_dbfs, io_layout.get_out_size()),
+        has_input(io_layout.get_total_in_size() > 0),
+        has_output(io_layout.get_out_size() > 0),
+        initialized(true) {
     // Do not expose Csound output before the first successful PerformKsmps().
     //
     // Csound's spout may be uninitialized before the first processing cycle,
@@ -220,10 +227,11 @@ public:
   }
 
   bool is_valid() const {
-    return input_buffer.is_valid() && output_buffer.is_valid();
+    return initialized && (!has_input || input_buffer.is_valid()) &&
+           (!has_output || output_buffer.is_valid());
   }
 
-  bool is_full() { return input_buffer.is_full(); }
+  bool is_full() const { return input_buffer.is_full(); }
 
   bool write(MYFLT sample) { return input_buffer.write(sample); }
 
@@ -231,8 +239,11 @@ public:
 
   void clear() { reset(); }
 
-  int available_output_frames() { return output_buffer.available_frames(); }
-  int get_free_frames() { return input_buffer.get_free_frames(); }
+  int available_output_frames() const {
+    return output_buffer.available_frames();
+  }
+
+  int get_free_frames() const { return input_buffer.get_free_frames(); }
 
   void csound_performed() { output_buffer.csound_performed(); }
 
@@ -242,10 +253,11 @@ public:
   }
 
 private:
-  CsdInputAudioBuffer &in() { return input_buffer; }
-  CsdOutputAudioBuffer &out() { return output_buffer; }
   CsdInputAudioBuffer input_buffer;
   CsdOutputAudioBuffer output_buffer;
+  bool has_input{false};
+  bool has_output{false};
+  bool initialized{false};
 };
 
 class Timer {
@@ -268,18 +280,50 @@ struct CsdLog {
     if (!has_error_.load(std::memory_order_acquire)) {
       return "";
     }
-    return std::string(last_error_buffer_);
+
+    char local[sizeof(last_error_buffer_)];
+    uint32_t seq = 0;
+
+    for (;;) {
+      seq = error_seq.load(std::memory_order_acquire);
+
+      // An odd sequence number means a writer is currently updating the buffer.
+      if ((seq & 1u) != 0) {
+        continue;
+      }
+
+      std::memcpy(local, last_error_buffer_, sizeof(local));
+
+      if (error_seq.load(std::memory_order_acquire) == seq) {
+        break;
+      }
+    }
+
+    size_t len = 0;
+    while (len < sizeof(local) && local[len] != '\0') {
+      ++len;
+    }
+
+    return std::string(local, len);
   }
 
   void set_last_error(const char *msg) {
     if (!msg)
       return;
+
+    // Enter write state (odd sequence number).
+    error_seq.fetch_add(1u, std::memory_order_acq_rel);
+
     size_t i = 0;
     // Manual bounded copy to avoid strncpy's zero-padding overhead
     for (; i < sizeof(last_error_buffer_) - 1 && msg[i] != '\0'; ++i) {
       last_error_buffer_[i] = msg[i];
     }
     last_error_buffer_[i] = '\0';
+
+    // Leave write state (even sequence number).
+    error_seq.fetch_add(1u, std::memory_order_acq_rel);
+
     has_error_.store(true, std::memory_order_release);
   }
 
@@ -292,6 +336,7 @@ struct CsdLog {
   std::string compilation_log_buffer;
   char last_error_buffer_[4096] = {0};
   std::atomic<bool> has_error_{false};
+  std::atomic<uint32_t> error_seq{0};
 };
 
 /// Defines audio processing with Csound.
@@ -306,7 +351,7 @@ class Processor {
 public:
   /// Constructs processor with the content of CSD-file, layout of the IO-busses
   Processor(const std::string &csd, const IOLayout &io_layout_)
-      : csound(nullptr), csd_file_content(csd), io_layout(io_layout_){};
+      : csound(nullptr), csd_file_content(csd), io_layout(io_layout_) {}
 
   void shutdown();
 
@@ -341,7 +386,7 @@ public:
   bool read_output(MYFLT &sample);
 
   /// Is Csound ready to play
-  bool is_ready_to_play() { return ready_to_play; };
+  bool is_ready_to_play() const { return ready_to_play; };
 
   /// Returns IO-layout of the processr
   const IOLayout &get_io_layout() const { return io_layout; }
@@ -368,11 +413,12 @@ public:
   }
 
   void log(LogLevel level, const char *str) {
+    if (level == LogLevel::Error) {
+      logger.set_last_error(str);
+    }
+
     if (logger.log_callback != nullptr) {
       logger.log_callback(level, str);
-      if (level == LogLevel::Error) {
-        logger.set_last_error(str);
-      }
     }
   }
 
@@ -421,6 +467,7 @@ private:
   CsdAudioBuffers audio_buffers{};
   MidiBuffers midi_buffers{1024, 1024};
   std::atomic<bool> ready_to_play{false};
+  std::atomic<bool> needs_full_reinit{true};
   Timer timer{};
   CsdLog logger;
 };

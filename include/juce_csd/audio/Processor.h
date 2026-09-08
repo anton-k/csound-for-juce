@@ -2,6 +2,8 @@
 
 #include <LockFreeSpscQueue.h>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <csd_plugin/audio/Logger.h>
 #include <csd_plugin/audio/Processor.h>
 #include <csound/csound.hpp>
@@ -12,6 +14,7 @@
 #include <juce_csd/params/Parameters.h>
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace juce_csd {
 
@@ -38,11 +41,13 @@ static_assert(std::atomic<ProcessorStage>::is_always_lock_free,
 class ProcessorSync {
 public:
   ProcessorSync() = default;
+  ProcessorSync(const ProcessorSync &) = delete;
+  ProcessorSync &operator=(const ProcessorSync &) = delete;
 
   [[nodiscard]] bool start_process_block() noexcept {
     // If prepare/release has requested exclusive access, do not start
     // a new audio block.
-    if (block_process_requests.load(std::memory_order_acquire)) {
+    if (blocking_requests.load(std::memory_order_acquire) != 0) {
       return false;
     }
 
@@ -56,7 +61,7 @@ public:
 
     // Close a small race: if a blocking request arrived just after the
     // check but before we acquired the stage, release immediately.
-    if (block_process_requests.load(std::memory_order_acquire)) {
+    if (blocking_requests.load(std::memory_order_acquire) != 0) {
       const bool released = end(ProcessorStage::ProcessBlock);
       jassert(released);
       (void)released;
@@ -81,11 +86,11 @@ public:
         expected, ProcessorStage::Free, std::memory_order_release,
         std::memory_order_relaxed);
 
-    // When leaving prepare/release, allow audio processing again.
-    // Do not clear this for ProcessBlock, because a blocking operation
+    // When leaving prepare/release, reduce the blocking request count.
+    // Do not change this for ProcessBlock, because a blocking operation
     // may still be waiting.
     if (released && expected_stage != ProcessorStage::ProcessBlock) {
-      block_process_requests.store(false, std::memory_order_release);
+      blocking_requests.fetch_sub(1, std::memory_order_acq_rel);
     }
 
     return released;
@@ -94,7 +99,7 @@ public:
 private:
   bool enter_blocking(ProcessorStage new_stage, int timeout_ms) noexcept {
     // Ask the audio thread not to start new processBlock calls.
-    block_process_requests.store(true, std::memory_order_release);
+    blocking_requests.fetch_add(1, std::memory_order_acq_rel);
 
     const auto start = std::chrono::steady_clock::now();
     const auto timeout =
@@ -108,7 +113,7 @@ private:
 
       if (std::chrono::steady_clock::now() - start > timeout) {
         // Failed to acquire. Allow processing again.
-        block_process_requests.store(false, std::memory_order_release);
+        blocking_requests.fetch_sub(1, std::memory_order_acq_rel);
         return false;
       }
 
@@ -120,7 +125,7 @@ private:
   }
 
   std::atomic<ProcessorStage> stage{ProcessorStage::Free};
-  std::atomic<bool> block_process_requests{false};
+  std::atomic<int> blocking_requests{0};
 };
 
 struct ScopedStage {
@@ -160,7 +165,7 @@ public:
   Processor(const std::string &csd, const csd_plugin::IOLayout &,
             const ParameterSpec &parameter_spec,
             juce::AudioProcessor &processor);
-  ~Processor() = default;
+  ~Processor();
 
   /// Called on main thread to prepare plugin for audio processing
   void prepareToPlay(double sampleRate, int maxBlockSize);

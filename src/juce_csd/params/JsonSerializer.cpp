@@ -1,10 +1,11 @@
 #include <juce_csd/params/JsonSerializer.hpp>
 #include <juce_csd/params/Parameters.h>
 #include <juce_core/juce_core.h>
+#include <algorithm>
+#include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
 #include <string>
-#include <algorithm>
 
 using json = nlohmann::json;
 
@@ -31,10 +32,11 @@ void JsonSerializer::serialize(const ParameterSpecMap& spec, const AudioParamete
         }
     }
 
-    // 3. Choices: save choice as int
+    // 3. Choices: save Csound-facing 1-based value.
     for (const auto& pair : audio_parameters.choices) {
         if (pair.second != nullptr) {
-            json_data["audio"][pair.first] = pair.second->getIndex();
+            int juce_index = pair.second->getIndex();
+            json_data["audio"][pair.first] = (juce_index >= 0) ? (juce_index + 1) : 0;
         }
     }
 
@@ -135,20 +137,40 @@ param_ptr->convertTo0to1(static_cast<float>(spec_it->second.default_value));
             }
 
             // --- CHOICES ---
+            // Serialized values are Csound-facing 1-based values.
             for (auto& [id, param_ptr] : audio_parameters.choices) {
                 if (param_ptr == nullptr) continue;
 
-                float normalized_value = 0.0f;
+                int num_choices = param_ptr->choices.size();
+                if (num_choices <= 0) continue;
+
+                int fallback_index = 0;
                 auto spec_it = spec.audio_choices.find(id);
                 if (spec_it != spec.audio_choices.end()) {
-                    normalized_value =
-param_ptr->getNormalisableRange().convertTo0to1(static_cast<float>(spec_it->second.default_value));
+                    if (spec_it->second.default_value > 0) {
+                        fallback_index = juce::jlimit(0, num_choices - 1, spec_it->second.default_value - 1);
+                    }
                 }
 
-                if (audio_json.contains(id) && audio_json[id].is_number_integer()) {
-                    int index = audio_json[id].get<int>();
-                    float raw_norm = param_ptr->getNormalisableRange().convertTo0to1(static_cast<float>(index));
-                    normalized_value = std::clamp(raw_norm, 0.0f, 1.0f);
+                float normalized_value =
+                    param_ptr->getNormalisableRange().convertTo0to1(static_cast<float>(fallback_index));
+
+                if (audio_json.contains(id) && audio_json[id].is_number()) {
+                    int csound_value = 0;
+
+                    if (audio_json[id].is_number_integer()) {
+                        csound_value = audio_json[id].get<int>();
+                    } else {
+                        csound_value = static_cast<int>(std::round(audio_json[id].get<float>()));
+                    }
+
+                    int juce_index = 0;
+                    if (csound_value > 0) {
+                        juce_index = juce::jlimit(0, num_choices - 1, csound_value - 1);
+                    }
+
+                    normalized_value =
+                        param_ptr->getNormalisableRange().convertTo0to1(static_cast<float>(juce_index));
                 }
 
                 param_ptr->setValueNotifyingHost(normalized_value);

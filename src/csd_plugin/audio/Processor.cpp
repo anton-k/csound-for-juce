@@ -218,12 +218,23 @@ int Processor::midi_write(CSOUND *csound_, void *userData,
   csd_plugin::RawMidiEvent midi_event{processor->get_cycle_end_sample(),
                                       midi_buffer, safe_size};
 
-  processor->midi_buffers.out().push(midi_event);
+  const bool pushed = processor->midi_buffers.out().push(midi_event);
 
-  return 0;
+  if (!pushed) {
+    processor->log(csd_plugin::LogLevel::Warning,
+                   "MIDI output FIFO overflow; dropping MIDI event");
+  }
+
+  // Tell Csound that the message was consumed.
+  //
+  // Returning 0 can be interpreted as a MIDI write failure by some Csound
+  // setups.
+  return midi_buffer_size;
 }
 
 void Processor::stop_and_reset_csound() {
+  needs_full_reinit.store(true, std::memory_order_release);
+
   if (csound == nullptr) {
     return;
   }
@@ -258,19 +269,26 @@ bool Processor::setup_csound(int sample_rate) {
   // Passing .c_str() of a temporary std::format result is a use-after-free!
   std::string opt_r = std::format("-r{}", safe_sample_rate);
 
+  // Use compact Csound option forms.
+  //
+  // Csound::SetOption() expects options like "-iadc" and "-odac".
+  // Spaced forms such as "-i adc" are not reliable and can leave Csound
+  // without a valid host audio configuration, causing PerformKsmps() to fail.
   csound->SetOption("-d");
   csound->SetOption("-m0");
-  csound->SetOption("-+rtmidi=NULL");
-  csound->SetOption("-M0");
+  csound->SetOption("-+rtmidi=null");
   csound->SetOption(opt_r.c_str());
-  csound->SetOption("-Q0");
+
+  if (io_layout.has_midi_in) {
+    csound->SetOption("-M0");
+  }
 
   if (io_layout.get_total_in_size() > 0) {
-    csound->SetOption("-i adc");
+    csound->SetOption("-iadc");
   }
 
   if (io_layout.get_out_size() > 0) {
-    csound->SetOption("-o dac");
+    csound->SetOption("-odac");
   } else {
     csound->SetOption("-n");
   }
@@ -302,6 +320,7 @@ bool Processor::setup_csound(int sample_rate) {
     log(csd_plugin::LogLevel::Error, error_text);
 
     ready_to_play.store(false, std::memory_order_release);
+    needs_full_reinit.store(true, std::memory_order_release);
     std::string().swap(logger.compilation_log_buffer);
     return false;
   }
@@ -338,7 +357,8 @@ bool Processor::prepare_to_play(int host_sample_rate) {
   ready_to_play.store(true, std::memory_order_release);
   log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true");
   log(LogLevel::Info,
-      std::format("\ncsd_in {}, csd_out {}", csound->GetChannels(1),
+      std::format("\ncsd_in {}, csd_out {}",
+                  csound->GetChannels(1),
                   csound->GetChannels(0))
           .c_str());
   log(LogLevel::Info,
@@ -351,15 +371,19 @@ bool Processor::prepare_to_play(int host_sample_rate) {
 
 bool Processor::prepare_csound_to_play(int sample_rate) {
   const bool needs_csound_reinit =
-      (csound == nullptr) || (csound_settings.sample_rate != sample_rate);
+      (csound == nullptr) || (csound_settings.sample_rate != sample_rate) ||
+      needs_full_reinit.load(std::memory_order_acquire);
 
   if (needs_csound_reinit) {
     stop_and_reset_csound();
+
     if (!setup_csound(sample_rate)) {
+      needs_full_reinit.store(true, std::memory_order_release);
       return false;
     }
 
     csound_settings.prepare(csound.get());
+    needs_full_reinit.store(false, std::memory_order_release);
   } else {
     if (!csound) {
       return false;
@@ -381,35 +405,33 @@ bool Processor::process() {
 
   bool ok = csound->PerformKsmps() == 0;
 
-  if (!ok) {
-    for (int retry_index = 0; retry_index < 2; ++retry_index) {
-      csound->Reset();
-      ok = csound->PerformKsmps() == 0;
-      if (ok) {
-        break;
-      }
-    }
-  }
-
   // Reset input state for the next Csound cycle.
   audio_buffers.reset();
 
-  // Expose output only if Csound actually produced a valid cycle.
-  //
-  // If PerformKsmps() failed, Csound's spout may contain stale or invalid
-  // data. Keeping the output buffer empty makes the caller produce silence
-  // instead of harsh noise.
   if (ok) {
+    // Expose output only if Csound actually produced a valid cycle.
+    //
+    // If PerformKsmps() failed, Csound's spout may contain stale or invalid
+    // data. Keeping the output buffer empty makes the caller produce silence
+    // instead of harsh noise.
     audio_buffers.csound_performed();
+    timer.next(csound_settings.ksmps);
+  } else {
+    // Do not call Csound::Reset() here.
+    //
+    // Reset can invalidate cached Csound channel pointers held by the
+    // Parameters module. It is safer to stop processing and report the error.
+    logger.set_last_error("Csound processing failed");
+    log(LogLevel::Error, "Csound processing failed");
+    ready_to_play.store(false, std::memory_order_release);
+    needs_full_reinit.store(true, std::memory_order_release);
   }
 
-  timer.next(csound_settings.ksmps);
   return ok;
 }
 
 void Processor::release_resources() {
   ready_to_play.store(false, std::memory_order_release);
-  logger.log_callback = nullptr;
   stop_and_reset_csound();
   clear_buffers();
   timer.reset();
@@ -502,19 +524,15 @@ bool Processor::validate_io_layout() {
   const int expected_in = io_layout.get_total_in_size();
   const int expected_out = io_layout.get_out_size();
 
-  if (csound_in_channels != expected_in) {
-    // Csound bug: csound reports nchnls_i = 0 as 1 with API call.
-    if (expected_in == 0 && csound_in_channels == 1) {
-      return true;
-    }
-    return false;
-  }
+  // If the plugin does not use audio input/output, do not fail just because
+  // the CSD defines some default channel count.
+  const bool in_ok =
+      (expected_in == 0) || (csound_in_channels == expected_in);
 
-  if (csound_out_channels != expected_out) {
-    return false;
-  }
+  const bool out_ok =
+      (expected_out == 0) || (csound_out_channels == expected_out);
 
-  return true;
+  return in_ok && out_ok;
 }
 
 } // namespace csd_plugin

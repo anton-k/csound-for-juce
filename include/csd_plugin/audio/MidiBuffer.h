@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <csd_plugin/audio/FastFifo.h>
@@ -19,7 +21,9 @@ struct RawMidiEvent {
 
     // Constructor from raw bytes
     RawMidiEvent(int64_t pos, const uint8_t* rawData, uint8_t rawDataSize)
-        : samplePosition(pos), size(rawDataSize > MIDI_DATA_SIZE ? MIDI_DATA_SIZE : rawDataSize)
+        : samplePosition(pos),
+          size(rawDataSize > MIDI_DATA_SIZE ? MIDI_DATA_SIZE : rawDataSize),
+          data{0, 0, 0, 0}
     {
         // Fast, zero-allocation copy.
         // We cap at 4 bytes to silently ignore SysEx and guarantee RT-safety.
@@ -32,7 +36,7 @@ struct RawMidiEvent {
 /// Contains queue of midi events (excluding SysEx)
 class MidiBuffer {
   public:
-    MidiBuffer(size_t size): midi_buffer(std::max(size, (size_t)16)) {};
+    MidiBuffer(size_t size): midi_buffer(std::max(size, static_cast<size_t>(16))) {};
 
     /// Clears midi buffer
     void clear();

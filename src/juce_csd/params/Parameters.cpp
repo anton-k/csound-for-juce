@@ -3,7 +3,10 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <csound/csound.h>
 #include <csound/csound.hpp>
+#include <algorithm>
+#include <cmath>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -156,8 +159,20 @@ void Parameters::init_bool_audio_parameters(juce::AudioProcessor& processor, con
 
 void Parameters::init_choice_audio_parameters(juce::AudioProcessor& processor, const std::vector<AudioParameterChoiceSpec>& param_specs) {
     for (const auto& spec : param_specs) {
+        if (spec.choices.isEmpty()) {
+            DBG("Skipping empty choice parameter: " << spec.name);
+            continue;
+        }
+
+        // JUCE uses 0-based indices internally.
+        // The spec default_value is 1-based for Csound.
+        int default_index = 0;
+        if (spec.default_value > 0) {
+            default_index = juce::jlimit(0, spec.choices.size() - 1, spec.default_value - 1);
+        }
+
         DBG("Creating choice parameter: " << spec.name);
-        auto* param = new juce::AudioParameterChoice(spec.id, spec.name, spec.choices, spec.default_value);
+        auto* param = new juce::AudioParameterChoice(spec.id, spec.name, spec.choices, default_index);
 
         // Add to processor
         processor.addParameter(param);
@@ -196,6 +211,10 @@ void Parameters::init_sensor_parameters(const std::vector<SensorParameterSpec>& 
 }
 
 void Parameters::prepare(Csound* csound, double sample_rate) {
+  if (csound == nullptr) {
+    return;
+  }
+
   prepare_cached_audio_parameters(csound, sample_rate);
   prepare_cached_host_parameters(csound);
   prepare_sensor_parameters(csound);
@@ -206,7 +225,9 @@ void Parameters::prepare_krate_counter(Csound* csound, double sample_rate) {
   int ksmps = csound->GetKsmps();
   int current_krate = static_cast<int>(sample_rate) / std::max(1, ksmps);
   krate_divider = std::max(1, current_krate / PARAMETER_SMOOTH_RATE);
-  krate_counter = 0;
+
+  // Make the first Csound cycle update parameters, so initial values are sent.
+  krate_counter = krate_divider - 1;
 }
 
 // TODO: do not put in cache paraeters with nullptr as prameter.ptr
@@ -300,8 +321,11 @@ void Parameters::update_discrete_audio_params() {
             audio_parameter.cached.set_value(param->get() ? 1.0 : 0.0);
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterChoice>) {
-            // Choice parameter
-            audio_parameter.cached.set_value(static_cast<double>(param->getIndex()));
+            // Choice parameter.
+            // JUCE index is 0-based; Csound expects 1-based values.
+            int choice_index = param->getIndex();
+            double csound_value = (choice_index >= 0) ? static_cast<double>(choice_index + 1) : 0.0;
+            audio_parameter.cached.set_value(csound_value);
         }
         else if constexpr (std::is_same_v<ParamType, juce::AudioParameterInt>) {
             // Integer parameter
@@ -337,9 +361,10 @@ void Parameters::update_sensor_params() {
 }
 
 namespace {
-  void set_optional_csound_param(CachedInputParam& param, const juce::Optional<double>& value) {
+  template <typename ValueType>
+  void set_optional_csound_param(CachedInputParam& param, const juce::Optional<ValueType>& value) {
      if (value.hasValue()) {
-       param.set_value(*value);
+       param.set_value(static_cast<double>(*value));
      }
   }
 }
@@ -435,6 +460,10 @@ void Parameters::update_krate_params(int ksmps) {
     int step_size = ksmps * krate_divider;
 
     for (auto& smooth_param : cached_smoothed_audio_parameters) {
+        if (smooth_param.param == nullptr) {
+            continue;
+        }
+
         float value_to_send = smooth_param.param->process(step_size);
         smooth_param.cached.set_value(static_cast<double>(value_to_send));
     }
