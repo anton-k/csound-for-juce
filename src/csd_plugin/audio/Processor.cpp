@@ -97,16 +97,16 @@ int Processor::get_latency_samples() {
 }
 
 void Processor::write_input(MYFLT sample) {
-  audio_buffers.write(csound_settings.zero_dbfs * sample);
+  // CsdInputAudioBuffer already applies zero_dbfs scaling.
+  audio_buffers.write(sample);
 }
 
 bool Processor::read_output(MYFLT &sample) {
+  // CsdOutputAudioBuffer already applies inverse_zero_dbfs scaling.
   bool read_success = audio_buffers.read(sample);
 
   if (!read_success) {
     sample = 0.0; // Prevent stale memory/feedback loops on underflow
-  } else {
-    sample = wrap_limiter(csound_settings.inverse_zero_dbfs * sample);
   }
 
   return read_success;
@@ -378,10 +378,11 @@ void Processor::prepare_audio_buffers() {
 bool Processor::process() {
   if (!ready_to_play.load())
     return false;
+
   bool ok = csound->PerformKsmps() == 0;
+
   if (!ok) {
     for (int retry_index = 0; retry_index < 2; ++retry_index) {
-
       csound->Reset();
       ok = csound->PerformKsmps() == 0;
       if (ok) {
@@ -389,8 +390,19 @@ bool Processor::process() {
       }
     }
   }
+
+  // Reset input state for the next Csound cycle.
   audio_buffers.reset();
-  audio_buffers.csound_performed();
+
+  // Expose output only if Csound actually produced a valid cycle.
+  //
+  // If PerformKsmps() failed, Csound's spout may contain stale or invalid
+  // data. Keeping the output buffer empty makes the caller produce silence
+  // instead of harsh noise.
+  if (ok) {
+    audio_buffers.csound_performed();
+  }
+
   timer.next(csound_settings.ksmps);
   return ok;
 }
@@ -414,7 +426,6 @@ void Processor::shutdown() {
 static int ceil_div(int a, int b) { return (a + b - 1) / b; }
 
 int Processor::get_csound_cycle_size(int block_size) {
-  const int out_size = io_layout.get_out_size();
   const int ksmps = csound_settings.ksmps;
 
   if (block_size <= 0 || ksmps <= 0)

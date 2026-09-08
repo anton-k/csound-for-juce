@@ -43,26 +43,30 @@ Processor::Processor(const std::string &csd_file_content,
 }
 
 void Processor::prepareToPlay(double sample_rate, int max_block_size) {
+  juce::ignoreUnused(max_block_size);
 
   if (!sync.start_prepare_to_play()) {
-    log(csd_plugin::LogLevel::Error, "Could not aquire processor stage");
-    // lifecycle_error.store(true, std::memory_order_release);
+    log(csd_plugin::LogLevel::Error, "Could not acquire processor stage");
     return;
   }
+
   ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
-  // lifecycle_error.store(false, std::memory_order_release);
 
   bool ok = csound.prepare_to_play(static_cast<int>(std::round(sample_rate)));
   if (ok && csound.is_ready_to_play()) {
     parameters.prepare(csound.get_csound(), sample_rate);
     processor_type = get_processor_type(csound.get_io_layout());
   } else {
-    //  lifecycle_error.store(true, std::memory_order_release);
+    log(csd_plugin::LogLevel::Error, "Csound prepare_to_play failed");
   }
 }
 
 void Processor::process_no_in_no_out(juce::AudioBuffer<float> &buffer) {
   int block_size = buffer.getNumSamples();
+  if (block_size <= 0) {
+    return;
+  }
+
   int csound_cycle_size = csound.get_csound_cycle_size(block_size);
   for (int index = 0; index < csound_cycle_size; ++index) {
     csound_process();
@@ -70,147 +74,85 @@ void Processor::process_no_in_no_out(juce::AudioBuffer<float> &buffer) {
 }
 
 void Processor::process_no_in_out(juce::AudioBuffer<float> &buffer) {
-  int block_size = buffer.getNumSamples();
-  int csound_cycle_size = csound.get_csound_cycle_size(block_size);
-  csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
-  int previous_output_size = csd_buffers.available_output_frames();
-  MYFLT sample{0.0};
-  int out_size = csound.get_io_layout().out_size;
-  int channel_size = buffer.getNumChannels();
-
-  // write samples from previous csound processing
-  for (int frame_index = 0; frame_index < previous_output_size; ++frame_index) {
-    for (int channel_index = 0; channel_index < channel_size; ++channel_index) {
-      if (channel_index < out_size) {
-        csd_buffers.read(sample);
-        buffer.setSample(channel_index, frame_index,
-                         static_cast<float>(sample));
-      } else {
-        buffer.setSample(channel_index, frame_index, 0.f);
-      }
-    }
+  const int block_size = buffer.getNumSamples();
+  if (block_size <= 0) {
+    return;
   }
-  int current_frame = previous_output_size;
-  int ksmps = csound.get_csound_settings().ksmps;
-  int max_channel_size = std::max(out_size, channel_size);
 
-  // process new samples and write them to buffer
-  for (int csound_index = 0; csound_index < csound_cycle_size; ++csound_index) {
-    csound_process();
-    for (int index = 0; index < ksmps; ++index) {
-      for (int channel_index = 0; channel_index < max_channel_size;
-           ++channel_index) {
-        if (channel_index < out_size) {
-          csd_buffers.read(sample);
-          if (channel_index < channel_size) {
-            buffer.setSample(channel_index, current_frame, sample);
-          }
-        } else {
-          if (channel_index < channel_size) {
-            buffer.setSample(channel_index, current_frame, 0.f);
-          }
+  const int host_channels = buffer.getNumChannels();
+  const auto &layout = csound.get_io_layout();
+  const int out_size = layout.get_out_size();
+
+  if (out_size <= 0) {
+    buffer.clear();
+    return;
+  }
+
+  csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
+
+  if (!csound.is_ready_to_play() || !csd_buffers.is_valid()) {
+    buffer.clear();
+    return;
+  }
+
+  for (int frame = 0; frame < block_size; ++frame) {
+    if (csd_buffers.available_output_frames() == 0) {
+      if (!csound_process()) {
+        for (int ch = 0; ch < host_channels; ++ch) {
+          buffer.clear(ch, frame, block_size - frame);
         }
-      }
-
-      current_frame++;
-      if (current_frame >= block_size) {
         return;
       }
     }
-  }
-}
-/*
-void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
-  int block_size = buffer.getNumSamples();
-  int csound_cycle_size = csound.get_csound_cycle_size(block_size);
-  csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
-  int previous_output_size = csd_buffers.available_output_frames();
-  MYFLT sample{0.0};
-  int in_size = csound.get_io_layout().get_total_in_size();
-  int out_size = csound.get_io_layout().out_size;
-  int channel_size = buffer.getNumChannels();
 
-  // write samples from previous csound processing
+    const bool has_output = (csd_buffers.available_output_frames() > 0);
 
-  for (int frame_index = 0; frame_index < previous_output_size; ++frame_index) {
-    for (int in_ch = 0; in_ch < in_size; ++in_ch) {
-      MYFLT input_sample =
-          (in_ch < channel_size)
-              ? static_cast<MYFLT>(buffer.getSample(in_ch, frame_index))
-              : 0.0;
+    for (int out_ch = 0; out_ch < out_size; ++out_ch) {
+      MYFLT output_sample = 0.0;
 
-      csd_buffers.write(input_sample);
-    }
+      if (has_output) {
+        csd_buffers.read(output_sample);
+      }
 
-    for (int channel_index = 0; channel_index < channel_size; ++channel_index) {
-      if (channel_index < out_size) {
-        csd_buffers.read(sample);
-        buffer.setSample(channel_index, frame_index,
-                         static_cast<float>(sample));
-      } else {
-        buffer.setSample(channel_index, frame_index, 0.f);
+      if (out_ch < host_channels) {
+        buffer.setSample(out_ch, frame, static_cast<float>(output_sample));
       }
     }
-  }
-  int current_frame = previous_output_size;
-  int ksmps = csound.get_csound_settings().ksmps;
-  int max_channel_size = std::max(out_size, channel_size);
 
-  // process new samples and write them to buffer
-  for (int csound_index = 0; csound_index < csound_cycle_size; ++csound_index) {
-    csound_process();
-    for (int index = 0; index < ksmps; ++index) {
-      for (int in_ch = 0; in_ch < in_size; ++in_ch) {
-        MYFLT input_sample =
-            (in_ch < channel_size)
-                ? static_cast<MYFLT>(buffer.getSample(in_ch, current_frame))
-                : 0.0;
-
-        csd_buffers.write(input_sample);
-      }
-
-      for (int channel_index = 0; channel_index < max_channel_size;
-           ++channel_index) {
-        if (channel_index < out_size) {
-          csd_buffers.read(sample);
-          if (channel_index < channel_size) {
-            buffer.setSample(channel_index, current_frame, sample);
-          }
-        } else {
-          if (channel_index < channel_size) {
-            buffer.setSample(channel_index, current_frame, 0.f);
-          }
-        }
-      }
-
-      current_frame++;
-      if (current_frame >= block_size) {
-        return;
-      }
+    for (int ch = out_size; ch < host_channels; ++ch) {
+      buffer.setSample(ch, frame, 0.0f);
     }
   }
 }
-*/
 
 void Processor::process_in_no_out(juce::AudioBuffer<float> &buffer) {
-  int block_size = buffer.getNumSamples();
+  const int block_size = buffer.getNumSamples();
+  if (block_size <= 0) {
+    return;
+  }
+
   csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
-  int channel_size = buffer.getNumChannels();
-  int in_size = csound.get_io_layout().get_total_in_size();
-  int max_channel_size = std::max(in_size, channel_size);
+  const int channel_size = buffer.getNumChannels();
+  const int in_size = csound.get_io_layout().get_total_in_size();
+  const int max_channel_size = std::max(in_size, channel_size);
 
   for (int frame_index = 0; frame_index < block_size; ++frame_index) {
     if (csd_buffers.is_full()) {
       bool is_ok = csound_process();
       if (!is_ok) {
-        csound.get_audio_buffers().reset();
+        csd_buffers.clear();
       }
     }
 
     for (int channel_index = 0; channel_index < max_channel_size;
          ++channel_index) {
       if (channel_index < in_size) {
-        csd_buffers.write(buffer.getSample(channel_index, frame_index));
+        MYFLT input_sample = (channel_index < channel_size)
+                                 ? static_cast<MYFLT>(buffer.getSample(
+                                       channel_index, frame_index))
+                                 : 0.0;
+
+        csd_buffers.write(input_sample);
       }
 
       if (channel_index < channel_size) {
@@ -237,34 +179,30 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
   }
 
   csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
-  //  log(csd_plugin::LogLevel::Info,
-  //      std::format("Valid buffers: {}\n", csd_buffers.is_valid()).c_str());
-  //  log(csd_plugin::LogLevel::Info,
-  //      std::format("Csound ready: {}\n", csound.is_ready_to_play()).c_str());
 
   if (!csound.is_ready_to_play() || !csd_buffers.is_valid()) {
     buffer.clear();
     return;
   }
-  // log(csd_plugin::LogLevel::Info, "Enter frame loop\n");
 
   for (int frame = 0; frame < block_size; ++frame) {
-    // log(csd_plugin::LogLevel::Info,
-    //    std::format("DUMP: {} / {} {} {} {}\n", block_size, frame,
-    //                 csd_buffers.available_output_frames(),
-    //                csd_buffers.get_free_frames(), csd_buffers.is_full())
-    //         .c_str());
-    // 1. PROCESS FIRST if the input buffer is full.
-    // This guarantees we never overflow the input FIFO.
+    // If a full Csound input cycle is ready, run Csound before writing the
+    // next host frame.
+    //
+    // This prevents input-buffer overflow and returns the previous Csound
+    // cycle with the expected ksmps latency.
     if (csd_buffers.is_full()) {
-      bool res = csound_process();
-      //  log(csd_plugin::LogLevel::Info,
-      //      std::format("Csound RESULT: {} {} {}\n", res,
-      //                  csound.is_ready_to_play(), csound.is_csound_valid())
-      //          .c_str());
+      const bool process_ok = csound_process();
+
+      if (!process_ok) {
+        // If Csound cannot process, keep this block safe by clearing the
+        // local Csound buffers. The host output for this frame will become
+        // silence below.
+        csd_buffers.clear();
+      }
     }
 
-    // 2. WRITE one input frame to Csound's spin
+    // Write one host frame into Csound's input buffer.
     for (int in_ch = 0; in_ch < in_size; ++in_ch) {
       MYFLT input_sample =
           (in_ch < host_channels)
@@ -274,12 +212,12 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
       csd_buffers.write(input_sample);
     }
 
-    // 3. READ one output frame from Csound's spout
-    // We only read if Csound has actually produced this frame.
-    // Because we process BEFORE writing/reading in this loop iteration,
-    // the output buffer should always have data available (unless it's the
-    // very first block before Csound has run its first cycle).
-    bool has_output = (csd_buffers.available_output_frames() > 0);
+    // Read one host frame from Csound's output buffer if it is available.
+    //
+    // For FX plugins, output is delayed by ksmps samples. Before the first
+    // full Csound cycle has completed, this naturally outputs silence instead
+    // of uninitialized Csound memory.
+    const bool has_output = (csd_buffers.available_output_frames() > 0);
 
     for (int out_ch = 0; out_ch < out_size; ++out_ch) {
       MYFLT output_sample = 0.0;
@@ -293,97 +231,12 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
       }
     }
 
-    // 4. Clear extra host channels
+    // Clear extra host channels that are not used by the Csound layout.
     for (int ch = out_size; ch < host_channels; ++ch) {
       buffer.setSample(ch, frame, 0.0f);
     }
   }
 }
-
-/*
-void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
-  int block_size = buffer.getNumSamples();
-  int csound_cycle_size = csound.get_csound_cycle_size(block_size);
-  int channel_size = buffer.getNumChannels();
-  int in_size = csound.get_io_layout().get_total_in_size();
-  int out_size = csound.get_io_layout().get_out_size();
-  int ksmps = csound.get_csound_settings().ksmps;
-  csd_plugin::CsdAudioBuffers &csd_buffers = csound.get_audio_buffers();
-  int max_out_size = std::max(out_size, channel_size);
-  MYFLT sample{0.0};
-
-  // write previous step samples
-  int previous_write_size =
-      std::min(csd_buffers.available_output_frames(), block_size);
-  for (int frame_index = 0; frame_index < previous_write_size; ++frame_index) {
-    for (int channel_index = 0; channel_index < in_size; ++channel_index) {
-      if (channel_index < channel_size) {
-        csd_buffers.write(
-            static_cast<MYFLT>(buffer.getSample(channel_index, frame_index)));
-      } else {
-        csd_buffers.write(0.f);
-      }
-    }
-  }
-
-  for (int frame_index = 0; frame_index < previous_write_size; ++frame_index) {
-    for (int channel_index = 0; channel_index < max_out_size; ++channel_index) {
-      if (channel_index < out_size) {
-        csd_buffers.read(sample);
-        if (channel_index < channel_size) {
-          buffer.setSample(channel_index, frame_index,
-                           static_cast<float>(sample));
-        }
-      } else {
-        if (channel_index < channel_size) {
-          buffer.setSample(channel_index, frame_index, 0.f);
-        }
-      }
-    }
-  }
-
-  int frame_index = previous_write_size;
-  if (frame_index >= block_size) {
-    return;
-  }
-
-  // write current step samples
-  for (int csound_index = 0; csound_index < csound_cycle_size; ++csound_index) {
-    csound_process();
-    for (int cycle_index = 0; cycle_index < ksmps; ++cycle_index) {
-      if (frame_index + cycle_index < block_size) {
-        // write current cycle input
-        for (int channel_index = 0; channel_index < in_size; ++channel_index) {
-          if (channel_index < channel_size) {
-            csd_buffers.write(
-                buffer.getSample(channel_index, frame_index + cycle_index));
-          } else {
-            csd_buffers.write(0.f);
-          }
-        }
-
-        // read current cycle output
-        for (int channel_index = 0; channel_index < max_out_size;
-             ++channel_index) {
-          if (channel_index < out_size) {
-            csd_buffers.read(sample);
-            if (channel_index < channel_size) {
-              buffer.setSample(channel_index, frame_index + cycle_index,
-                               sample);
-            }
-          } else {
-            if (channel_index < channel_size) {
-              buffer.setSample(channel_index, frame_index + cycle_index, 0.f);
-            }
-          }
-        }
-      }
-    }
-
-    frame_index += ksmps;
-  }
-}
-*/
 
 bool Processor::csound_process() {
   parameters.update_krate_params(csound.get_csound_settings().ksmps);
@@ -409,29 +262,24 @@ Processor::get_processor_type(const csd_plugin::IOLayout &io_layout) {
   }
 }
 
-// TODO: call pre csound process:  parameters.update_krate_params(ksmps);
 void Processor::processBlock(const juce::AudioProcessor &processor,
                              juce::AudioBuffer<float> &buffer,
                              juce::MidiBuffer &host_midi_buffer) {
   // JUCE plugins should enforce it at the entry point to
   // prevent massive CPU spikes on x86 architectures.
   const juce::ScopedNoDenormals noDenormals;
-  /*
-    if (!sync.start_process_block()) {
-      buffer.clear();
-      host_midi_buffer.clear();
-      return;
-    }
-    ScopedStage guard(sync, ProcessorStage::ProcessBlock);
-  */
-  if (/*lifecycle_error.load(std::memory_order_acquire) ||*/
-      !csound.is_ready_to_play()) {
+
+  if (!sync.start_process_block()) {
     buffer.clear();
     host_midi_buffer.clear();
     return;
   }
 
+  ScopedStage guard(sync, ProcessorStage::ProcessBlock);
+
   if (!csound.is_ready_to_play()) {
+    buffer.clear();
+    host_midi_buffer.clear();
     return;
   }
 
@@ -449,6 +297,8 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
     // For FX plugins, dry-through or crossfade bypass would be better.
     // But for FIFO stability, the important part is that we resynchronize
     // when entering/leaving bypass.
+    csound.get_audio_buffers().clear();
+    csound.get_midi_buffers().clear();
     buffer.clear();
     host_midi_buffer.clear();
     return;
@@ -492,14 +342,14 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
 }
 
 void Processor::releaseResources() {
-  /*
-    if (!sync.start_release_resources()) {
-      log(csd_plugin::LogLevel::Error,
-          "Could not acquire processor stage for releaseResources");
-      return;
-    }
-    ScopedStage guard(sync, ProcessorStage::ReleaseResources);
-  */
+  if (!sync.start_release_resources()) {
+    log(csd_plugin::LogLevel::Error,
+        "Could not acquire processor stage for releaseResources");
+    return;
+  }
+
+  ScopedStage guard(sync, ProcessorStage::ReleaseResources);
+
   csound.release_resources();
 }
 

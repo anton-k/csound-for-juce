@@ -2,6 +2,7 @@
 
 #include "MidiBuffer.h"
 #include "csd_plugin/audio/Logger.h"
+#include <algorithm>
 #include <atomic>
 #include <csound/csound.hpp>
 #include <csound/sysdep.h>
@@ -209,9 +210,13 @@ public:
                      settings.zero_dbfs, io_layout.get_total_in_size()),
         output_buffer(csound, settings.ksmps * io_layout.get_out_size(),
                       settings.inverse_zero_dbfs, io_layout.get_out_size()) {
-    if (io_layout.get_total_in_size() > 0 && io_layout.get_out_size() > 0) {
-      output_buffer.csound_performed();
-    }
+    // Do not expose Csound output before the first successful PerformKsmps().
+    //
+    // Csound's spout may be uninitialized before the first processing cycle,
+    // and exposing it here can cause clicks, harsh noise, or garbage samples.
+    //
+    // For FX layouts this means the first ksmps samples are silence, which
+    // matches the reported latency.
   }
 
   bool is_valid() const {
