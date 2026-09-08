@@ -3,6 +3,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(../../../cmake/CPM.cmake)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(JUCE_CSD_LINK_GLOBAL_CSOUND
+    OFF
+    CACHE BOOL
+    "Do not link global Csound for the reverb example"
+    FORCE)
+
 add_subdirectory(../../.. ${CMAKE_BINARY_DIR}/juce_csd_build)
 
 set(JUMAKE_TEMPLATE "AudioPlugin")
@@ -20,7 +26,7 @@ juce_add_plugin(${PROJECT_NAME}
     PLUGIN_MANUFACTURER_CODE CsdA               # A four-character manufacturer id with at least one upper-case character
     PLUGIN_CODE Rev0                            # A unique four-character plugin id with exactly one upper-case character
                                                 # GarageBand 10.3 requires the first letter to be upper-case, and the remaining letters to be lower-case
-    FORMATS AU VST3 Standalone CLAP                  # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
+    FORMATS VST3 Standalone                  # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
     PRODUCT_NAME ${PROJECT_NAME})        # The name of the final executable, which can differ from the target name
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -64,3 +70,7 @@ target_link_libraries(${PROJECT_NAME}
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/JuceCsdPrivateCsound.cmake)
+juce_csd_use_private_csound_vst3(${PROJECT_NAME})
+

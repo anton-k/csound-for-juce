@@ -3,6 +3,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(../../../cmake/CPM.cmake)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set(JUCE_CSD_LINK_GLOBAL_CSOUND
+    OFF
+    CACHE BOOL
+    "Do not link global Csound for the reverb example"
+    FORCE)
+
 add_subdirectory(../../.. ${CMAKE_BINARY_DIR}/juce_csd_build)
 
 set(JUMAKE_TEMPLATE "AudioPlugin")
@@ -64,3 +71,8 @@ target_link_libraries(${PROJECT_NAME}
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/JuceCsdPrivateCsound.cmake)
+juce_csd_use_private_csound_vst3(${PROJECT_NAME})
+

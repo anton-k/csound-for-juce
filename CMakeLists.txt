@@ -31,7 +31,42 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 endif()
 
 # Find Csound
-find_library(CSOUND_LIB csound64 REQUIRED)
+
+option(JUCE_CSD_LINK_GLOBAL_CSOUND
+    "Link juce_csd against the global Csound library"
+    ON
+)
+
+# Try to locate Csound headers.
+# If this does not find the correct path, set JUCE_CSD_CSOUND_INCLUDE_DIR manually.
+find_path(JUCE_CSD_CSOUND_INCLUDE_DIR
+    NAMES
+        csound/csound.h
+        csound.h
+)
+
+add_library(juce_csd_csound INTERFACE)
+
+if(JUCE_CSD_CSOUND_INCLUDE_DIR)
+    target_include_directories(juce_csd_csound
+        INTERFACE
+            "${JUCE_CSD_CSOUND_INCLUDE_DIR}"
+    )
+endif()
+
+if(JUCE_CSD_LINK_GLOBAL_CSOUND)
+    find_library(JUCE_CSD_CSOUND_LIBRARY
+        NAMES
+            csound64
+            csound
+        REQUIRED
+    )
+
+    target_link_libraries(juce_csd_csound
+        INTERFACE
+            "${JUCE_CSD_CSOUND_LIBRARY}"
+    )
+endif()
 
 # ---------------------------------------------------------
 # 2. Define Library Target
@@ -84,7 +119,7 @@ target_link_libraries(juce_csd
         spsc_queue
 
         # Kept PUBLIC so the final plugin automatically links Csound
-        ${CSOUND_LIB}
+        juce_csd_csound
 )
 
 target_compile_definitions(juce_csd PUBLIC
