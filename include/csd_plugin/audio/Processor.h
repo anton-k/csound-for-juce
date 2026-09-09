@@ -449,8 +449,6 @@ public:
   int get_csound_cycle_size(int block_size);
 
 private:
-  bool validate_io_layout();
-
   void prepare_audio_buffers();
   bool prepare_csound_to_play(int sample_rate);
 

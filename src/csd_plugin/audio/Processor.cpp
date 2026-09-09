@@ -305,13 +305,6 @@ bool Processor::prepare_to_play(int host_sample_rate) {
     return false;
   }
 
-  if (!validate_io_layout()) {
-    stop_and_reset_csound();
-    log(LogLevel::Error,
-        "prepare_to_play: csound channels are inconsistent with io_layout");
-    return false;
-  }
-
   midi_buffers.clear();
   prepare_audio_buffers();
 
@@ -465,27 +458,6 @@ void Processor::csound_message_callback(CSOUND *csound, int attr,
   } else {
     processor->log(level, buffer);
   }
-}
-
-bool Processor::validate_io_layout() {
-  if (csound.get() == nullptr) {
-    return false;
-  }
-
-  const int csound_in_channels = csound.get()->GetChannels(1);
-  const int csound_out_channels = csound.get()->GetChannels(0);
-
-  const int expected_in = io_layout.get_total_in_size();
-  const int expected_out = io_layout.get_out_size();
-
-  // If the plugin does not use audio input/output, do not fail just because
-  // the CSD defines some default channel count.
-  const bool in_ok = (expected_in == 0) || (csound_in_channels == expected_in);
-
-  const bool out_ok =
-      (expected_out == 0) || (csound_out_channels == expected_out);
-
-  return in_ok && out_ok;
 }
 
 } // namespace csd_plugin

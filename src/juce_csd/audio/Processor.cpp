@@ -50,14 +50,14 @@ Processor::~Processor() {
 void Processor::prepareToPlay(double sample_rate, int max_block_size) {
   log(csd_plugin::LogLevel::Info, "Prepare to play\n");
   juce::ignoreUnused(max_block_size);
+  /*
+    if (!sync.start_prepare_to_play()) {
+      log(csd_plugin::LogLevel::Error, "Could not acquire processor stage");
+      return;
+    }
 
-  if (!sync.start_prepare_to_play()) {
-    log(csd_plugin::LogLevel::Error, "Could not acquire processor stage");
-    return;
-  }
-
-  ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
-
+    ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
+  */
   processor_type = get_processor_type(csound.get_io_layout());
 
   bool ok = csound.prepare_to_play(static_cast<int>(std::round(sample_rate)));
@@ -368,15 +368,15 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
   // prevent massive CPU spikes on x86 architectures.
   log(csd_plugin::LogLevel::Info, "Process Block\n");
   const juce::ScopedNoDenormals noDenormals;
+  /*
+    if (!sync.start_process_block()) {
+      buffer.clear();
+      host_midi_buffer.clear();
+      return;
+    }
 
-  if (!sync.start_process_block()) {
-    buffer.clear();
-    host_midi_buffer.clear();
-    return;
-  }
-
-  ScopedStage guard(sync, ProcessorStage::ProcessBlock);
-
+    ScopedStage guard(sync, ProcessorStage::ProcessBlock);
+  */
   if (!csound.is_ready_to_play()) {
     buffer.clear();
     host_midi_buffer.clear();
@@ -457,7 +457,9 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
 }
 
 void Processor::releaseResources() {
+
   log(csd_plugin::LogLevel::Info, "Release resources\n");
+  /*
   if (!sync.start_release_resources()) {
     log(csd_plugin::LogLevel::Error,
         "Could not acquire processor stage for releaseResources");
@@ -465,7 +467,7 @@ void Processor::releaseResources() {
   }
 
   ScopedStage guard(sync, ProcessorStage::ReleaseResources);
-
+*/
   csound.release_resources();
 }
 
