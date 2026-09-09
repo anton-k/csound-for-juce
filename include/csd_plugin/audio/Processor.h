@@ -133,11 +133,17 @@ public:
     if (spin == nullptr || capacity <= 0)
       return;
     int total_samples = ksmps * channel_size;
-    int read_count = buffer.read_block_partial(spin, total_samples);
-    for (int i = read_count; i < total_samples; ++i) {
-      spin[i] = 0.0;
+    // int read_count = buffer.read_block_partial(spin, total_samples);
+    MYFLT sample{0.0};
+    for (int i = 0; i < total_samples; ++i) {
+      bool ok = buffer.read(sample);
+      if (ok) {
+        spin[i] = sample;
+      } else {
+        spin[i] = 0.0;
+      }
     }
-    //    buffer.clear();
+    buffer.clear();
   }
 
   bool write(MYFLT sample) {

@@ -248,6 +248,8 @@ bool Processor::setup_csound(int sample_rate) {
       std::format("--nchnls_i={}", io_layout.get_total_in_size()).c_str());
   // csound->SetOption((char *)"-n");
   csound->SetOption((char *)"-d");
+  csound->SetOption((char *)"-iadc");
+  csound->SetOption((char *)"-odac");
   // csound->SetOption((char *)"-b0");
   csound->SetOption((char *)"-m0");
 
