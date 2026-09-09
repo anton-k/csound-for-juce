@@ -32,8 +32,8 @@ outs aoutL, aoutR
 endin
 </CsInstruments>
 <CsScore>
-f 0 z
+f 0 36000
 i 1 0 -1
-
+e
 </CsScore>
 </CsoundSynthesizer>

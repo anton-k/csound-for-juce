@@ -217,7 +217,7 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
     //                csd_buffers.is_full(), csd_buffers.get_free_frames(),
     //                csd_buffers.available_output_frames())
     //        .c_str());
-    if (csd_buffers.is_full()) {
+    if (csd_buffers.is_full() && csd_buffers.available_output_frames() == 0) {
       if (!csound_process()) {
         for (int ch = 0; ch < host_channels; ++ch) {
           buffer.clear(ch, frame, block_size - frame);
