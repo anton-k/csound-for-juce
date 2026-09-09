@@ -363,12 +363,39 @@ bool Processor::process() {
   if (!ready_to_play.load())
     return false;
 
+  log(LogLevel::Info, std::format("AUDIO STATE 1  {} {} {} {}\n",
+                                  audio_buffers.get_free_frames(),
+                                  audio_buffers.available_output_frames(),
+                                  audio_buffers.input_buffer.buffer.get_size(),
+                                  audio_buffers.output_buffer.get_size())
+                          .c_str());
   audio_buffers.prepare_for_csound(csound.get(), csound_settings.ksmps);
+
+  log(LogLevel::Info, std::format("AUDIO STATE 2  {} {} {} {}\n",
+                                  audio_buffers.get_free_frames(),
+                                  audio_buffers.available_output_frames(),
+                                  audio_buffers.input_buffer.buffer.get_size(),
+                                  audio_buffers.output_buffer.get_size())
+                          .c_str());
+
+  MYFLT *spin = csound->GetSpin();
+  log(LogLevel::Info,
+      std::format("SPIN STATE 2  {} {} {} {} {} {} {} {}\n", spin[0], spin[1],
+                  spin[2], spin[3], spin[4], spin[5], spin[6], spin[7])
+          .c_str());
 
   bool ok = csound->PerformKsmps() == 0;
 
   if (ok) {
     audio_buffers.collect_from_csound(csound.get(), csound_settings.ksmps);
+    log(LogLevel::Info,
+        std::format("AUDIO STATE 3  {} {} {} {}\n",
+                    audio_buffers.get_free_frames(),
+                    audio_buffers.available_output_frames(),
+                    audio_buffers.input_buffer.buffer.get_size(),
+                    audio_buffers.output_buffer.get_size())
+            .c_str());
+
     timer.next(csound_settings.ksmps);
   } else {
     log(LogLevel::Error, "Csound processing failed");

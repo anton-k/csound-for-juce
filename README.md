@@ -32,6 +32,12 @@ Get started:
 * check out the repo [`reverb-csd-juce`](https://github.com/anton-k/reverb-csd-juce)
    for an example on how to use the library with Cmake in your own project.
 
+## Issues
+
+known issues:
+
+FX plugins do not work. Need to investigate.
+
 ## Comparison to Cabbage
 
 So why do we need yet another Csound_JUCE tool if we have Cabbage?

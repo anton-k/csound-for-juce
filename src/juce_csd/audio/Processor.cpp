@@ -50,14 +50,14 @@ Processor::~Processor() {
 void Processor::prepareToPlay(double sample_rate, int max_block_size) {
   log(csd_plugin::LogLevel::Info, "Prepare to play\n");
   juce::ignoreUnused(max_block_size);
-  /*
-    if (!sync.start_prepare_to_play()) {
-      log(csd_plugin::LogLevel::Error, "Could not acquire processor stage");
-      return;
-    }
 
-    ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
-  */
+  if (!sync.start_prepare_to_play()) {
+    log(csd_plugin::LogLevel::Error, "Could not acquire processor stage");
+    return;
+  }
+
+  ScopedStage guard(sync, ProcessorStage::PrepareToPlay);
+
   processor_type = get_processor_type(csound.get_io_layout());
 
   bool ok = csound.prepare_to_play(static_cast<int>(std::round(sample_rate)));
@@ -218,7 +218,14 @@ void Processor::process_in_out(juce::AudioBuffer<float> &buffer) {
     //                csd_buffers.available_output_frames())
     //        .c_str());
     if (csd_buffers.is_full() && csd_buffers.available_output_frames() == 0) {
+      log(csd_plugin::LogLevel::Info,
+          std::format("frame {} / {} full {} free {} out {}\n", block_size,
+                      frame, csd_buffers.is_full(),
+                      csd_buffers.get_free_frames(),
+                      csd_buffers.available_output_frames())
+              .c_str());
       if (!csound_process()) {
+
         for (int ch = 0; ch < host_channels; ++ch) {
           buffer.clear(ch, frame, block_size - frame);
         }
@@ -366,17 +373,16 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
                              juce::MidiBuffer &host_midi_buffer) {
   // JUCE plugins should enforce it at the entry point to
   // prevent massive CPU spikes on x86 architectures.
-  log(csd_plugin::LogLevel::Info, "Process Block\n");
   const juce::ScopedNoDenormals noDenormals;
-  /*
-    if (!sync.start_process_block()) {
-      buffer.clear();
-      host_midi_buffer.clear();
-      return;
-    }
 
-    ScopedStage guard(sync, ProcessorStage::ProcessBlock);
-  */
+  if (!sync.start_process_block()) {
+    buffer.clear();
+    host_midi_buffer.clear();
+    return;
+  }
+
+  ScopedStage guard(sync, ProcessorStage::ProcessBlock);
+
   if (!csound.is_ready_to_play()) {
     buffer.clear();
     host_midi_buffer.clear();
@@ -459,7 +465,7 @@ void Processor::processBlock(const juce::AudioProcessor &processor,
 void Processor::releaseResources() {
 
   log(csd_plugin::LogLevel::Info, "Release resources\n");
-  /*
+
   if (!sync.start_release_resources()) {
     log(csd_plugin::LogLevel::Error,
         "Could not acquire processor stage for releaseResources");
@@ -467,7 +473,7 @@ void Processor::releaseResources() {
   }
 
   ScopedStage guard(sync, ProcessorStage::ReleaseResources);
-*/
+
   csound.release_resources();
 }
 
