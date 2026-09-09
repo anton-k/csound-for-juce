@@ -235,39 +235,24 @@ bool Processor::setup_csound(int sample_rate) {
   // Always create a fresh Csound instance
   csound = std::make_unique<Csound>();
 
-  csound->SetHostData(this);
   set_host_io();
+  csound->SetHostData(this);
+  set_csound_midi_callbacks();
   csound->SetMessageCallback(csound_message_callback);
 
-  set_csound_midi_callbacks();
+  csound->SetOption(std::format("--sample-rate={}", safe_sample_rate).c_str());
+  csound->SetOption(
+      std::format("--nchnls={}", io_layout.get_out_size()).c_str());
 
-  // IMPORTANT: Csound's SetOption may store the pointer and read it later
-  // during CompileCSD. We must ensure the strings stay alive until then.
-  // Passing .c_str() of a temporary std::format result is a use-after-free!
-  std::string opt_r = std::format("-r{}", safe_sample_rate);
-
-  // Use compact Csound option forms.
-  //
-  // Csound::SetOption() expects options like "-iadc" and "-odac".
-  // Spaced forms such as "-i adc" are not reliable and can leave Csound
-  // without a valid host audio configuration, causing PerformKsmps() to fail.
-  csound->SetOption("-d");
-  csound->SetOption("-m0");
-  csound->SetOption("-+rtmidi=null");
-  csound->SetOption(opt_r.c_str());
+  csound->SetOption(
+      std::format("--nchnls_i={}", io_layout.get_total_in_size()).c_str());
+  csound->SetOption((char *)"-n");
+  csound->SetOption((char *)"-d");
+  // csound->SetOption((char *)"-b0");
+  csound->SetOption((char *)"-m0");
 
   if (io_layout.has_midi_in) {
-    csound->SetOption("-M0");
-  }
-
-  if (io_layout.get_total_in_size() > 0) {
-    csound->SetOption("-iadc");
-  }
-
-  if (io_layout.get_out_size() > 0) {
-    csound->SetOption("-odac");
-  } else {
-    csound->SetOption("-n");
+    csound->SetOption((char *)"-M0");
   }
 
   logger.is_compiling = true;
@@ -277,11 +262,6 @@ bool Processor::setup_csound(int sample_rate) {
   int start_result = 0;
 
   if (compile_result == 0) {
-    // Do not re-assert host I/O here.
-    //
-    // Some Csound versions expect host I/O configuration to remain stable
-    // around compilation/start. Re-asserting it after CompileCSD() can
-    // disturb the audio I/O state and cause the plugin to go silent.
     start_result = csound->Start();
   }
 
@@ -309,6 +289,10 @@ bool Processor::setup_csound(int sample_rate) {
 }
 
 bool Processor::prepare_to_play(int host_sample_rate) {
+  if (ready_to_play.load() && csound != nullptr &&
+      csound->GetSr() == host_sample_rate) {
+    return true;
+  }
   ready_to_play.store(false, std::memory_order_release);
   logger.clear_last_error();
   timer.reset();
@@ -332,13 +316,18 @@ bool Processor::prepare_to_play(int host_sample_rate) {
   prepare_audio_buffers();
 
   ready_to_play.store(true, std::memory_order_release);
-  log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true");
+  log(LogLevel::Info, "prepare_to_play: success, ready_to_play = true\n");
+  log(LogLevel::Info, std::format("audio buffers: free {}, available {}\n",
+                                  audio_buffers.get_free_frames(),
+                                  audio_buffers.available_output_frames())
+                          .c_str());
+
   log(LogLevel::Info,
-      std::format("\ncsd_in {}, csd_out {}", csound->GetChannels(1),
+      std::format("csd_in {}, csd_out {}\n", csound->GetChannels(1),
                   csound->GetChannels(0))
           .c_str());
   log(LogLevel::Info,
-      std::format("\nin {}, out {}", io_layout.get_total_in_size(),
+      std::format("in {}, out {}\n", io_layout.get_total_in_size(),
                   io_layout.get_out_size())
           .c_str());
 
@@ -387,11 +376,6 @@ bool Processor::process() {
     audio_buffers.collect_from_csound(csound.get(), csound_settings.ksmps);
     timer.next(csound_settings.ksmps);
   } else {
-    // Do not call Csound::Reset() here.
-    //
-    // Reset can invalidate cached Csound channel pointers held by the
-    // Parameters module. It is safer to stop processing and report the error.
-    logger.set_last_error("Csound processing failed");
     log(LogLevel::Error, "Csound processing failed");
     ready_to_play.store(false, std::memory_order_release);
     needs_full_reinit.store(true, std::memory_order_release);

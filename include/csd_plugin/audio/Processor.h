@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <csound/csound.h>
 #include <csound/csound.hpp>
 #include <csound/sysdep.h>
 #include <cstdarg>
@@ -115,12 +116,8 @@ class CsdInputAudioBuffer {
 public:
   CsdInputAudioBuffer() = default;
   CsdInputAudioBuffer(int size_, MYFLT scale_, int channel_size_)
-      : capacity(size_), scale(scale_), channel_size(channel_size_) {
-    if (capacity > 0) {
-      // Allocate extra space to accommodate block-size mismatches
-      buffer.reset(capacity * 2);
-    }
-  }
+      : capacity(size_), scale(scale_), channel_size(channel_size_),
+        buffer(size_) {}
 
   bool is_valid() const { return capacity > 0; }
   int get_capacity() const { return capacity; }
@@ -140,6 +137,7 @@ public:
     for (int i = read_count; i < total_samples; ++i) {
       spin[i] = 0.0;
     }
+    //    buffer.clear();
   }
 
   bool write(MYFLT sample) {
@@ -151,22 +149,18 @@ public:
   void clear() { buffer.clear(); }
 
 private:
-  AudioBuffer<MYFLT> buffer;
   int capacity{0};
   MYFLT scale{1.0};
   int channel_size{0};
+  AudioBuffer<MYFLT> buffer;
 };
 
 class CsdOutputAudioBuffer {
 public:
   CsdOutputAudioBuffer() = default;
   CsdOutputAudioBuffer(int size_, MYFLT scale_, int channel_size_)
-      : capacity(size_), scale(scale_), channel_size(channel_size_) {
-    if (capacity > 0) {
-      // Allocate extra space to accommodate prefill and block-size mismatches
-      buffer.reset(capacity * 2);
-    }
-  }
+      : capacity(size_), scale(scale_), channel_size(channel_size_),
+        buffer(size_) {}
 
   int get_size() const { return buffer.get_size(); }
   bool is_valid() const { return capacity > 0; }
@@ -207,10 +201,10 @@ public:
   void clear() { buffer.clear(); }
 
 private:
-  AudioBuffer<MYFLT> buffer;
   int capacity{0};
   MYFLT scale{1.0};
   int channel_size{0};
+  AudioBuffer<MYFLT> buffer;
 };
 
 class CsdAudioBuffers {
