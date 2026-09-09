@@ -6,6 +6,7 @@
 #include <csound/csound.h>
 #include <csound/csound.hpp>
 #include <csound/sysdep.h>
+#include <csound/version.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -248,8 +249,8 @@ bool Processor::setup_csound(int sample_rate) {
       std::format("--nchnls_i={}", io_layout.get_total_in_size()).c_str());
   // csound->SetOption((char *)"-n");
   csound->SetOption((char *)"-d");
-  csound->SetOption((char *)"-iadc");
-  csound->SetOption((char *)"-odac");
+  // csound->SetOption((char *)"-iadc");
+  // csound->SetOption((char *)"-odac");
   // csound->SetOption((char *)"-b0");
   csound->SetOption((char *)"-m0");
 
@@ -291,6 +292,9 @@ bool Processor::setup_csound(int sample_rate) {
 }
 
 bool Processor::prepare_to_play(int host_sample_rate) {
+  log(LogLevel::Info, std::format("CSOUND VERSION: {} {} {}", CS_VERSION,
+                                  CS_PACKAGE_DATE, CS_PACKAGE_VERSION)
+                          .c_str());
   if (ready_to_play.load() && csound != nullptr &&
       csound->GetSr() == host_sample_rate) {
     return true;
@@ -388,6 +392,7 @@ bool Processor::process() {
 
   if (ok) {
     audio_buffers.collect_from_csound(csound.get(), csound_settings.ksmps);
+
     log(LogLevel::Info,
         std::format("AUDIO STATE 3  {} {} {} {}\n",
                     audio_buffers.get_free_frames(),
